@@ -4,8 +4,11 @@ from app.graph import (
     build_graph,
     build_initial_state,
     buyer_agent,
+    generate_invoice,
     guardrail_validator,
     parse_offer,
+    payment_authorization,
+    payment_request,
     route_after_guardrail,
 )
 
@@ -110,19 +113,27 @@ def test_negotiation_graph_reaches_a_terminal_status_within_turn_limit():
 
     final_state = graph.invoke(initial_state)
 
-    assert final_state["status"] in ("AGREEMENT", "TERMINATED")
+    assert final_state["status"] in ("FULFILLED", "TERMINATED")
     assert final_state["turn"] <= MAX_TURNS
     assert final_state["messages"][0]["sender"] == "BuyerAgent"
 
 
-def test_negotiation_graph_converges_to_agreement_within_bounds():
+def test_negotiation_graph_converges_to_fulfilled_with_invoice():
     graph = build_graph()
     initial_state = build_initial_state("txn-1", VENDOR_CONFIG, BUYER_CONFIG)
 
     final_state = graph.invoke(initial_state)
 
-    assert final_state["status"] == "AGREEMENT"
+    assert final_state["status"] == "FULFILLED"
     assert VENDOR_CONFIG["Floor_Price"] <= final_state["current_price"] <= BUYER_CONFIG["Buyer_Ceiling_Price"]
+
+    invoice = final_state["invoice"]
+    assert invoice["transaction_id"] == "txn-1"
+    assert invoice["product_id"] == VENDOR_CONFIG["Product_ID"]
+    assert invoice["unit_price"] == final_state["current_price"]
+    assert invoice["quantity"] == final_state["current_quantity"]
+    assert invoice["total_amount"] == round(final_state["current_price"] * final_state["current_quantity"], 2)
+    assert invoice["payment_status"] == "succeeded"
 
 
 def test_buyer_agent_logs_message_via_telemetry(monkeypatch):
@@ -150,3 +161,46 @@ def test_guardrail_validator_logs_system_message_via_telemetry(monkeypatch):
 
     assert len(logged) == 1
     assert logged[0]["sender_type"] == "System"
+
+
+def test_payment_request_sets_payment_pending_and_records_invoice_fields():
+    state = _state_with_messages([], status="AGREEMENT", current_price=9.0, current_quantity=200)
+
+    update = payment_request(state)
+
+    assert update["status"] == "PAYMENT_PENDING"
+    assert update["invoice"]["agreed_unit_price"] == 9.0
+    assert update["invoice"]["quantity"] == 200
+    assert update["invoice"]["total_amount"] == 1800.0
+    assert update["invoice"]["payment_status"] == "requires_confirmation"
+
+
+def test_payment_authorization_sets_fulfilled_and_succeeded_status():
+    state = _state_with_messages(
+        [],
+        status="PAYMENT_PENDING",
+        current_price=9.0,
+        current_quantity=200,
+        invoice={"total_amount": 1800.0},
+    )
+
+    update = payment_authorization(state)
+
+    assert update["status"] == "FULFILLED"
+    assert update["invoice"]["authorized_amount"] == 1800.0
+    assert update["invoice"]["payment_status"] == "succeeded"
+
+
+def test_generate_invoice_builds_invoice_from_agreed_terms():
+    state = _state_with_messages(
+        [], status="FULFILLED", current_price=9.0, current_quantity=200, invoice={}
+    )
+
+    update = generate_invoice(state)
+
+    invoice = update["invoice"]
+    assert invoice["transaction_id"] == "txn-1"
+    assert invoice["product_id"] == VENDOR_CONFIG["Product_ID"]
+    assert invoice["unit_price"] == 9.0
+    assert invoice["quantity"] == 200
+    assert invoice["total_amount"] == 1800.0

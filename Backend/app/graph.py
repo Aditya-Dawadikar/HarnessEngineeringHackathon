@@ -14,7 +14,7 @@ from typing import Literal, Optional, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from app import telemetry
+from app import payments, telemetry
 
 MAX_TURNS = 10
 CONVERGENCE_THRESHOLD = 0.5
@@ -195,6 +195,84 @@ def guardrail_validator(state: NegotiationState) -> dict:
     return update
 
 
+def _run_payment_tool(state: NegotiationState, *, agent_id: str, tool_name: str, payload: dict, tool_fn) -> dict:
+    try:
+        result = tool_fn(**payload)
+        execution_status = "Success"
+        error_message = ""
+    except Exception as exc:
+        result = {}
+        execution_status = "Failed"
+        error_message = str(exc)
+
+    telemetry.log_tool_execution(
+        transaction_id=state["transaction_id"],
+        agent_id=agent_id,
+        tool_name=tool_name,
+        payload=payload,
+        execution_status=execution_status,
+        error_message=error_message,
+    )
+
+    return result
+
+
+def payment_request(state: NegotiationState) -> dict:
+    unit_price = state["current_price"]
+    quantity = state["current_quantity"]
+    payload = {
+        "transaction_id": state["transaction_id"],
+        "buyer_agent_id": "BuyerAgent",
+        "product_id": state["vendor_config"]["Product_ID"],
+        "agreed_unit_price": unit_price,
+        "quantity": quantity,
+        "total_amount": round(unit_price * quantity, 2),
+    }
+
+    result = _run_payment_tool(
+        state,
+        agent_id="VendorAgent",
+        tool_name="payment_request",
+        payload=payload,
+        tool_fn=payments.create_payment_request,
+    )
+
+    return {"status": "PAYMENT_PENDING", "invoice": {**payload, **result}}
+
+
+def payment_authorization(state: NegotiationState) -> dict:
+    invoice = dict(state["invoice"] or {})
+    payload = {
+        "transaction_id": state["transaction_id"],
+        "payment_method_token": "tok_mock_visa",
+        "authorized_amount": invoice.get("total_amount"),
+    }
+
+    result = _run_payment_tool(
+        state,
+        agent_id="BuyerAgent",
+        tool_name="payment_authorization",
+        payload=payload,
+        tool_fn=payments.authorize_payment,
+    )
+
+    return {"status": "FULFILLED", "invoice": {**invoice, **payload, **result}}
+
+
+def generate_invoice(state: NegotiationState) -> dict:
+    invoice = dict(state["invoice"] or {})
+    invoice.update(
+        {
+            "transaction_id": state["transaction_id"],
+            "product_id": state["vendor_config"]["Product_ID"],
+            "unit_price": state["current_price"],
+            "quantity": state["current_quantity"],
+            "total_amount": round(state["current_price"] * state["current_quantity"], 2),
+        }
+    )
+    return {"invoice": invoice}
+
+
 def route_after_guardrail(state: NegotiationState) -> str:
     if state["status"] == "TERMINATED":
         return "terminated"
@@ -209,10 +287,16 @@ def build_graph():
     graph.add_node("buyer_agent", buyer_agent)
     graph.add_node("vendor_agent", vendor_agent)
     graph.add_node("guardrail_validator", guardrail_validator)
+    graph.add_node("payment_request", payment_request)
+    graph.add_node("payment_authorization", payment_authorization)
+    graph.add_node("generate_invoice", generate_invoice)
 
     graph.add_edge(START, "buyer_agent")
     graph.add_edge("buyer_agent", "guardrail_validator")
     graph.add_edge("vendor_agent", "guardrail_validator")
+    graph.add_edge("payment_request", "payment_authorization")
+    graph.add_edge("payment_authorization", "generate_invoice")
+    graph.add_edge("generate_invoice", END)
 
     graph.add_conditional_edges(
         "guardrail_validator",
@@ -220,7 +304,7 @@ def build_graph():
         {
             "buyer_agent": "buyer_agent",
             "vendor_agent": "vendor_agent",
-            "agreement": END,
+            "agreement": "payment_request",
             "terminated": END,
         },
     )
