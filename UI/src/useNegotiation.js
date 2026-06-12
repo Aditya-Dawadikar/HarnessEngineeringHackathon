@@ -8,6 +8,7 @@ export function useNegotiation() {
   const [state, setState] = useState(null)   // full negotiation object
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [polling, setPolling] = useState(false)
   const intervalRef = useRef(null)
   const txIdRef = useRef(null)
 
@@ -16,6 +17,7 @@ export function useNegotiation() {
       clearInterval(intervalRef.current)
       intervalRef.current = null
     }
+    setPolling(false)
   }, [])
 
   const poll = useCallback(async () => {
@@ -43,6 +45,7 @@ export function useNegotiation() {
         ? await mockStart()
         : await startNegotiation()
       txIdRef.current = transaction_id
+      setPolling(true)
       // immediate first fetch, then every 1 s
       await poll()
       intervalRef.current = setInterval(poll, 1000)
@@ -55,5 +58,5 @@ export function useNegotiation() {
 
   useEffect(() => stopPolling, [stopPolling])
 
-  return { state, error, loading, start }
+  return { state, error, loading, polling, start }
 }
