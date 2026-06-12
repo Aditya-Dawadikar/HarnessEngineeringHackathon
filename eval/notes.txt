@@ -1,0 +1,16 @@
+curl -X POST https://api.pioneer.ai/generate \
+  -H "X-API-Key: $PIONEER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "task_type": "decoder",
+    "dataset_name": "negotiation-agent-evals",
+    "num_examples": 10,
+    "domain_description": "Autonomous procurement negotiation between BuyerAgent and VendorAgent.",
+    "prompt": "Generate negotiation scenarios in JSON. Each example must contain scenario_id, vendor_config, buyer_config, and expected_labels. Return only valid JSON."
+  }'
+
+{"job_id":"5dcecae6-01ce-4724-bb69-dbcdd22279f7","status":"queued","dataset_name":"negotiation-agent-evals","task_type":"decoder","is_seed":false,"message":"Generation job started"}
+
+
+curl https://api.pioneer.ai/generate/jobs/5dcecae6-01ce-4724-bb69-dbcdd22279f7 \
+  -H "X-API-Key: $PIONEER_API_KEY"

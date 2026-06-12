@@ -5,3 +5,5 @@ langchain-core
 pytest
 httpx
 requests
+clickhouse-connect
+python-dotenv

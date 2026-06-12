@@ -12,14 +12,22 @@ block the negotiation.
 
 import json
 import logging
+import os
+import threading
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
+
+import clickhouse_connect
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 logger = logging.getLogger("telemetry")
 
 AGENT_MESSAGE_LOGS_DDL = """
-CREATE TABLE default.agent_message_logs (
+CREATE TABLE IF NOT EXISTS default.agent_message_logs (
     message_id UUID,
     transaction_id UUID,
     timestamp DateTime64(3, 'UTC'),
@@ -37,7 +45,7 @@ ORDER BY (transaction_id, timestamp);
 """
 
 AGENT_TOOL_EXECUTIONS_DDL = """
-CREATE TABLE default.agent_tool_executions (
+CREATE TABLE IF NOT EXISTS default.agent_tool_executions (
     tool_execution_id UUID,
     transaction_id UUID,
     timestamp DateTime64(3, 'UTC'),
@@ -52,8 +60,69 @@ ORDER BY (tool_name, transaction_id, timestamp);
 """
 
 
+def _env(name: str, default: Optional[str] = None) -> Optional[str]:
+    return os.environ.get(name, default)
+
+
+CLICKHOUSE_HOST = _env("CLICKHOUSE_HOST")
+CLICKHOUSE_PORT = int(_env("CLICKHOUSE_PORT", "8443"))
+CLICKHOUSE_DATABASE = _env("CLICKHOUSE_DATABASE", "default")
+CLICKHOUSE_USER = _env("CLICKHOUSE_USER")
+CLICKHOUSE_PASSWORD = _env("CLICKHOUSE_PASSWORD")
+CLICKHOUSE_SECURE = _env("CLICKHOUSE_SECURE", "true").lower() == "true"
+
+
+_UNSET = object()
+_CLIENT = _UNSET
+_CLIENT_LOCK = threading.Lock()
+
+
+def _get_client():
+    global _CLIENT
+    with _CLIENT_LOCK:
+        if _CLIENT is _UNSET:
+            try:
+                client = clickhouse_connect.get_client(
+                    host=CLICKHOUSE_HOST,
+                    port=CLICKHOUSE_PORT,
+                    username=CLICKHOUSE_USER,
+                    password=CLICKHOUSE_PASSWORD,
+                    database=CLICKHOUSE_DATABASE,
+                    secure=CLICKHOUSE_SECURE,
+                )
+                client.command(f"CREATE DATABASE IF NOT EXISTS {CLICKHOUSE_DATABASE}")
+                client.command(AGENT_MESSAGE_LOGS_DDL)
+                client.command(AGENT_TOOL_EXECUTIONS_DDL)
+                _CLIENT = client
+            except Exception as exc:
+                logger.error("ClickHouse client initialization failed: %s", exc)
+                _CLIENT = None
+    return _CLIENT
+
+
+def _coerce_row(row: dict) -> dict:
+    row = dict(row)
+    if "extracted_price" in row and row["extracted_price"] is None:
+        row["extracted_price"] = 0.0
+    if "extracted_quantity" in row and row["extracted_quantity"] is None:
+        row["extracted_quantity"] = 0
+    if isinstance(row.get("timestamp"), str):
+        row["timestamp"] = datetime.fromisoformat(row["timestamp"])
+    return row
+
+
 def _insert(table: str, row: dict) -> None:
-    logger.info("[telemetry] %s: %s", table, json.dumps(row, default=str))
+    client = _get_client()
+    if client is None:
+        raise RuntimeError("ClickHouse client is not available")
+
+    row = _coerce_row(row)
+    logger.debug("[telemetry] %s: %s", table, json.dumps(row, default=str))
+    client.insert(
+        f"{CLICKHOUSE_DATABASE}.{table}",
+        [list(row.values())],
+        column_names=list(row.keys()),
+    )
 
 
 def _safe_insert(table: str, row: dict) -> None:

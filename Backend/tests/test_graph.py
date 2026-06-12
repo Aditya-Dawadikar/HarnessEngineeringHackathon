@@ -183,12 +183,11 @@ def test_payment_request_sets_payment_pending_and_records_invoice_fields():
 
 
 def test_payment_authorization_sets_fulfilled_and_succeeded_status():
+    request_state = _state_with_messages([], status="AGREEMENT", current_price=9.0, current_quantity=200)
+    invoice = payment_request(request_state)["invoice"]
+
     state = _state_with_messages(
-        [],
-        status="PAYMENT_PENDING",
-        current_price=9.0,
-        current_quantity=200,
-        invoice={"total_amount": 1800.0},
+        [], status="PAYMENT_PENDING", current_price=9.0, current_quantity=200, invoice=invoice
     )
 
     update = payment_authorization(state)
@@ -196,6 +195,27 @@ def test_payment_authorization_sets_fulfilled_and_succeeded_status():
     assert update["status"] == "FULFILLED"
     assert update["invoice"]["authorized_amount"] == 1800.0
     assert update["invoice"]["payment_status"] == "succeeded"
+    assert update["invoice"]["payment_intent_id"] == invoice["payment_intent_id"]
+
+
+def test_payment_authorization_logs_validation_error_for_unknown_intent(monkeypatch):
+    logged = []
+    monkeypatch.setattr(
+        "app.graph.telemetry.log_tool_execution", lambda **kwargs: logged.append(kwargs)
+    )
+
+    state = _state_with_messages(
+        [],
+        status="PAYMENT_PENDING",
+        current_price=9.0,
+        current_quantity=200,
+        invoice={"total_amount": 1800.0, "payment_intent_id": "pi_mock_does_not_exist"},
+    )
+
+    update = payment_authorization(state)
+
+    assert logged[0]["execution_status"] == "ValidationError"
+    assert "payment_status" not in update["invoice"]
 
 
 def test_generate_invoice_builds_invoice_from_agreed_terms():

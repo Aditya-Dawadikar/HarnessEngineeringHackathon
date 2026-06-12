@@ -27,7 +27,17 @@ eval/      Pioneer MLOps evaluation pipeline
 
 ## Quick start
 
-### 1. Start the backend
+### Option A — one-command startup
+
+```bash
+./startup.sh
+```
+
+Starts the FastAPI backend on `:8000` and the Vite UI dev server on `:5173`. Open the printed URL and click **Start Negotiation**. Stop both with `Ctrl+C`.
+
+### Option B — manual
+
+#### 1. Start the backend
 
 ```bash
 cd Backend
@@ -38,7 +48,7 @@ uvicorn app.main:app --reload
 # Listening on http://localhost:8000
 ```
 
-### 2. Start the UI
+#### 2. Start the UI
 
 ```bash
 cd UI
@@ -49,7 +59,7 @@ npm run dev
 
 The Vite dev server proxies `/negotiations/*` to `:8000`, so no CORS configuration is needed in development.
 
-### 3. Run the UI without a backend (mock mode)
+#### 3. Run the UI without a backend (mock mode)
 
 ```bash
 cd UI
@@ -76,4 +86,4 @@ When the frontend and backend are deployed on different domains, the browser enf
 
 ## LLM configuration (Pioneer.ai)
 
-Set `PIONEER_API_KEY` (or `PROMISE_API_KEY`) to enable live LLM negotiation. Without it the backend falls back to a deterministic mock strategy. See `Backend/README.md` for all env vars.
+Set `PIONEER_API_KEY` (or `PROMISE_API_KEY`) to enable live LLM negotiation. Without it the backend falls back to a deterministic mock strategy. See `Backend/README.md` for all env vars and `PIONEER_SETUP.md` for Pioneer.ai integration notes including the model currently used by the agents.
