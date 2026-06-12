@@ -12,9 +12,10 @@ dist/
 build/
 .vite/
 
-# Env files
+# Env files (keep .example templates committed)
 .env
 .env.*
+!.env.example
 
 # Credential dumps
 *_credentials.txt
