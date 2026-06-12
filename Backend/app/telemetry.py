@@ -100,8 +100,29 @@ def _get_client():
     return _CLIENT
 
 
+def _coerce_row(row: dict) -> dict:
+    row = dict(row)
+    if "extracted_price" in row and row["extracted_price"] is None:
+        row["extracted_price"] = 0.0
+    if "extracted_quantity" in row and row["extracted_quantity"] is None:
+        row["extracted_quantity"] = 0
+    if isinstance(row.get("timestamp"), str):
+        row["timestamp"] = datetime.fromisoformat(row["timestamp"])
+    return row
+
+
 def _insert(table: str, row: dict) -> None:
-    logger.info("[telemetry] %s: %s", table, json.dumps(row, default=str))
+    client = _get_client()
+    if client is None:
+        raise RuntimeError("ClickHouse client is not available")
+
+    row = _coerce_row(row)
+    logger.debug("[telemetry] %s: %s", table, json.dumps(row, default=str))
+    client.insert(
+        f"{CLICKHOUSE_DATABASE}.{table}",
+        [list(row.values())],
+        column_names=list(row.keys()),
+    )
 
 
 def _safe_insert(table: str, row: dict) -> None:

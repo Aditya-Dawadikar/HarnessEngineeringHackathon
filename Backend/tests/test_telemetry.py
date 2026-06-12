@@ -1,37 +1,69 @@
 import logging
+from datetime import datetime
 from unittest.mock import Mock
 
 from app import telemetry
 
 
-def test_log_message_logs_to_console(caplog):
-    with caplog.at_level(logging.INFO, logger="telemetry"):
-        telemetry.log_message(
-            transaction_id="txn-1",
-            conversation_turn=1,
-            sender_type="BuyerAgent",
-            sender_id="BuyerAgent",
-            receiver_id="VendorAgent",
-            raw_message="hello",
-            extracted_price=9.0,
-            extracted_quantity=200,
-            llm_metadata={"model": "mock"},
-        )
+def test_log_message_inserts_into_clickhouse(monkeypatch):
+    mock_client = Mock()
+    monkeypatch.setattr(telemetry, "_CLIENT", telemetry._UNSET)
+    monkeypatch.setattr(telemetry.clickhouse_connect, "get_client", lambda **kwargs: mock_client)
 
-    assert any("agent_message_logs" in record.message for record in caplog.records)
+    telemetry.log_message(
+        transaction_id="txn-1",
+        conversation_turn=1,
+        sender_type="BuyerAgent",
+        sender_id="BuyerAgent",
+        receiver_id="VendorAgent",
+        raw_message="hello",
+        extracted_price=9.0,
+        extracted_quantity=200,
+        llm_metadata={"model": "mock"},
+    )
+
+    mock_client.insert.assert_called_once()
+    table, rows = mock_client.insert.call_args[0]
+    column_names = mock_client.insert.call_args[1]["column_names"]
+    row = rows[0]
+
+    assert table == "default.agent_message_logs"
+    assert column_names == [
+        "message_id", "transaction_id", "timestamp", "conversation_turn",
+        "sender_type", "sender_id", "receiver_id", "raw_message",
+        "extracted_price", "extracted_quantity", "llm_metadata",
+    ]
+    assert row[column_names.index("extracted_price")] == 9.0
+    assert row[column_names.index("extracted_quantity")] == 200
+    assert isinstance(row[column_names.index("timestamp")], datetime)
 
 
-def test_log_tool_execution_logs_to_console(caplog):
-    with caplog.at_level(logging.INFO, logger="telemetry"):
-        telemetry.log_tool_execution(
-            transaction_id="txn-1",
-            agent_id="VendorAgent",
-            tool_name="payment_request",
-            payload={"amount": 100},
-            execution_status="Success",
-        )
+def test_log_tool_execution_inserts_into_clickhouse(monkeypatch):
+    mock_client = Mock()
+    monkeypatch.setattr(telemetry, "_CLIENT", telemetry._UNSET)
+    monkeypatch.setattr(telemetry.clickhouse_connect, "get_client", lambda **kwargs: mock_client)
 
-    assert any("agent_tool_executions" in record.message for record in caplog.records)
+    telemetry.log_tool_execution(
+        transaction_id="txn-1",
+        agent_id="VendorAgent",
+        tool_name="payment_request",
+        payload={"amount": 100},
+        execution_status="Success",
+    )
+
+    mock_client.insert.assert_called_once()
+    table, rows = mock_client.insert.call_args[0]
+    column_names = mock_client.insert.call_args[1]["column_names"]
+    row = rows[0]
+
+    assert table == "default.agent_tool_executions"
+    assert column_names == [
+        "tool_execution_id", "transaction_id", "timestamp", "agent_id",
+        "tool_name", "payload", "execution_status", "error_message",
+    ]
+    assert row[column_names.index("tool_name")] == "payment_request"
+    assert row[column_names.index("execution_status")] == "Success"
+    assert isinstance(row[column_names.index("timestamp")], datetime)
 
 
 def test_insert_failure_is_logged_and_does_not_raise(monkeypatch, caplog):
@@ -95,3 +127,27 @@ def test_get_client_returns_none_and_logs_error_when_unavailable(monkeypatch, ca
 
     assert client is None
     assert any("connection refused" in record.message for record in caplog.records)
+
+
+def test_log_message_coerces_none_price_and_quantity_to_zero(monkeypatch):
+    mock_client = Mock()
+    monkeypatch.setattr(telemetry, "_CLIENT", telemetry._UNSET)
+    monkeypatch.setattr(telemetry.clickhouse_connect, "get_client", lambda **kwargs: mock_client)
+
+    telemetry.log_message(
+        transaction_id="txn-1",
+        conversation_turn=1,
+        sender_type="System",
+        sender_id="System",
+        receiver_id="System",
+        raw_message="guardrail check",
+        extracted_price=None,
+        extracted_quantity=None,
+    )
+
+    table, rows = mock_client.insert.call_args[0]
+    column_names = mock_client.insert.call_args[1]["column_names"]
+    row = rows[0]
+
+    assert row[column_names.index("extracted_price")] == 0.0
+    assert row[column_names.index("extracted_quantity")] == 0
