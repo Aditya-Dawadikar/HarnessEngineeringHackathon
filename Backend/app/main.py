@@ -1,11 +1,19 @@
 import uuid
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import BUYER_CONFIG, VENDOR_CONFIG
 from app.graph import NegotiationState, build_graph, build_initial_state
 
 app = FastAPI(title="Agentic Negotiation & Procurement Platform")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 
 _GRAPH = build_graph()
 
