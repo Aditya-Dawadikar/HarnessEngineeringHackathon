@@ -1,4 +1,3 @@
-import os
 import uuid
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
@@ -9,13 +8,10 @@ from app.graph import NegotiationState, build_graph, build_initial_state
 
 app = FastAPI(title="Agentic Negotiation & Procurement Platform")
 
-_raw = os.environ.get("CORS_ORIGINS", "*")
-_origins = [o.strip() for o in _raw.split(",")] if _raw != "*" else ["*"]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_origins,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_origins=["*"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
