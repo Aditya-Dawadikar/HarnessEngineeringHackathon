@@ -57,3 +57,5 @@ def test_insert_failure_is_logged_and_does_not_raise(monkeypatch, caplog):
 def test_ddl_defines_expected_tables():
     assert "agent_message_logs" in telemetry.AGENT_MESSAGE_LOGS_DDL
     assert "agent_tool_executions" in telemetry.AGENT_TOOL_EXECUTIONS_DDL
+    assert "IF NOT EXISTS" in telemetry.AGENT_MESSAGE_LOGS_DDL
+    assert "IF NOT EXISTS" in telemetry.AGENT_TOOL_EXECUTIONS_DDL

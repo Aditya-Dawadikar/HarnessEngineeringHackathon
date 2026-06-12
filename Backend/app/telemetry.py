@@ -19,7 +19,7 @@ from typing import Optional
 logger = logging.getLogger("telemetry")
 
 AGENT_MESSAGE_LOGS_DDL = """
-CREATE TABLE default.agent_message_logs (
+CREATE TABLE IF NOT EXISTS default.agent_message_logs (
     message_id UUID,
     transaction_id UUID,
     timestamp DateTime64(3, 'UTC'),
@@ -37,7 +37,7 @@ ORDER BY (transaction_id, timestamp);
 """
 
 AGENT_TOOL_EXECUTIONS_DDL = """
-CREATE TABLE default.agent_tool_executions (
+CREATE TABLE IF NOT EXISTS default.agent_tool_executions (
     tool_execution_id UUID,
     transaction_id UUID,
     timestamp DateTime64(3, 'UTC'),
