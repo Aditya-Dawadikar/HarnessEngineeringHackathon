@@ -12,9 +12,16 @@ block the negotiation.
 
 import json
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
+
+import clickhouse_connect
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 logger = logging.getLogger("telemetry")
 
@@ -50,6 +57,44 @@ CREATE TABLE IF NOT EXISTS default.agent_tool_executions (
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (tool_name, transaction_id, timestamp);
 """
+
+
+def _env(name: str, default: Optional[str] = None) -> Optional[str]:
+    return os.environ.get(name, default)
+
+
+CLICKHOUSE_HOST = _env("CLICKHOUSE_HOST")
+CLICKHOUSE_PORT = int(_env("CLICKHOUSE_PORT", "8443"))
+CLICKHOUSE_DATABASE = _env("CLICKHOUSE_DATABASE", "default")
+CLICKHOUSE_USER = _env("CLICKHOUSE_USER")
+CLICKHOUSE_PASSWORD = _env("CLICKHOUSE_PASSWORD")
+CLICKHOUSE_SECURE = _env("CLICKHOUSE_SECURE", "true").lower() == "true"
+
+
+_UNSET = object()
+_CLIENT = _UNSET
+
+
+def _get_client():
+    global _CLIENT
+    if _CLIENT is _UNSET:
+        try:
+            client = clickhouse_connect.get_client(
+                host=CLICKHOUSE_HOST,
+                port=CLICKHOUSE_PORT,
+                username=CLICKHOUSE_USER,
+                password=CLICKHOUSE_PASSWORD,
+                database=CLICKHOUSE_DATABASE,
+                secure=CLICKHOUSE_SECURE,
+            )
+            client.command(f"CREATE DATABASE IF NOT EXISTS {CLICKHOUSE_DATABASE}")
+            client.command(AGENT_MESSAGE_LOGS_DDL)
+            client.command(AGENT_TOOL_EXECUTIONS_DDL)
+            _CLIENT = client
+        except Exception as exc:
+            logger.error("ClickHouse client initialization failed: %s", exc)
+            _CLIENT = None
+    return _CLIENT
 
 
 def _insert(table: str, row: dict) -> None:

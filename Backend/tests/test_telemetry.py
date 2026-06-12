@@ -1,4 +1,5 @@
 import logging
+from unittest.mock import Mock
 
 from app import telemetry
 
@@ -59,3 +60,38 @@ def test_ddl_defines_expected_tables():
     assert "agent_tool_executions" in telemetry.AGENT_TOOL_EXECUTIONS_DDL
     assert "IF NOT EXISTS" in telemetry.AGENT_MESSAGE_LOGS_DDL
     assert "IF NOT EXISTS" in telemetry.AGENT_TOOL_EXECUTIONS_DDL
+
+
+def test_get_client_runs_ddl_on_first_call_only(monkeypatch):
+    mock_client = Mock()
+    get_client_mock = Mock(return_value=mock_client)
+    monkeypatch.setattr(telemetry, "_CLIENT", telemetry._UNSET)
+    monkeypatch.setattr(telemetry.clickhouse_connect, "get_client", get_client_mock)
+
+    first = telemetry._get_client()
+    second = telemetry._get_client()
+
+    assert first is mock_client
+    assert second is mock_client
+    assert get_client_mock.call_count == 1
+
+    ddl_calls = [call.args[0] for call in mock_client.command.call_args_list]
+    assert len(ddl_calls) == 3
+    assert any("CREATE DATABASE IF NOT EXISTS" in c for c in ddl_calls)
+    assert any("agent_message_logs" in c for c in ddl_calls)
+    assert any("agent_tool_executions" in c for c in ddl_calls)
+
+
+def test_get_client_returns_none_and_logs_error_when_unavailable(monkeypatch, caplog):
+    monkeypatch.setattr(telemetry, "_CLIENT", telemetry._UNSET)
+    monkeypatch.setattr(
+        telemetry.clickhouse_connect,
+        "get_client",
+        Mock(side_effect=RuntimeError("connection refused")),
+    )
+
+    with caplog.at_level(logging.ERROR, logger="telemetry"):
+        client = telemetry._get_client()
+
+    assert client is None
+    assert any("connection refused" in record.message for record in caplog.records)
