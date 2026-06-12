@@ -4,6 +4,9 @@ Single-page React (Vite) app that triggers a negotiation and renders the live
 agent chat, status, inventory context, and final invoice. Talks to the FastAPI
 backend in `../Backend`.
 
+> To run this alongside the backend with one command, use `../startup.sh`
+> from the repo root.
+
 ## Install
 
 ```bash

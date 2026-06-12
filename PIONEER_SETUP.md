@@ -59,3 +59,31 @@ Use this setup for creating our Vendor and Buyer Agents
   if unset.
 - `PROMISE_MODEL` / `PIONEER_MODEL` default to `gpt-4.1-mini`; override via
   env var to try a different chat model from `GET /v1/models`.
+
+### 5. Switched to the fine-tuned negotiation model (2026-06-12)
+- `eval/pioneer_mlops.py` generated a synthetic `negotiation-agent-evals`
+  dataset and fine-tuned `Qwen/Qwen3-8B` (LoRA) on it via Pioneer's
+  `/felix/training-jobs` API. Job/dataset/model ids are recorded in
+  `eval/pioneer_mlops.log`:
+  - `training_job_id`: `45ad5870-ba44-42d0-ad44-5c0902043fca`
+  - `model_name`: `negotiation-agent-evals-20260612211958`
+  - `base_model`: `Qwen/Qwen3-8B`
+  - `dataset`: `negotiation-agent-evals` (version 2)
+- Checked `GET /felix/training-jobs`: this job is `status=deployed`,
+  `normalized_status=complete`, `is_terminal_status=true`,
+  `provider_deployments.modal.status=active` -- the fine-tuned adapter is
+  live and callable.
+- `.env` now sets `PIONEER_MODEL=45ad5870-ba44-42d0-ad44-5c0902043fca`
+  (the training job id is the model id for `/v1/chat/completions`), so
+  `llm_client.generate()` -- and therefore both `buyer_agent` and
+  `vendor_agent` -- now call this fine-tuned model instead of
+  `gpt-4.1-mini`. This keeps the live agents in sync with the model
+  produced by `eval/pioneer_mlops.py`.
+- Live verification: ran `build_graph().invoke(...)` with the default
+  `VENDOR_CONFIG`/`BUYER_CONFIG` (`Backend/app/config.py`). All 7 turns
+  show `llm_metadata.source == "promise_platform"`. Negotiation converged
+  to $9.50/unit x 200 units ($1900 total) in 7 turns, status `FULFILLED`,
+  invoice + mock Stripe payment flow (BE-8) completed successfully.
+- A single turn against this model uses ~120 total tokens (per
+  `usage.total_tokens` in the raw `/v1/chat/completions` response),
+  noticeably cheaper than a general-purpose model for this task.
