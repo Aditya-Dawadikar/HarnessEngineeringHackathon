@@ -1,5 +1,6 @@
 import { useNegotiation } from './useNegotiation.js'
 import { MessageLog } from './MessageLog.jsx'
+import { InvoiceBlock } from './InvoiceBlock.jsx'
 import './App.css'
 
 export default function App() {
@@ -14,11 +15,14 @@ export default function App() {
           {loading ? 'Starting…' : 'Start Negotiation'}
         </button>
         {state && <span className={`badge badge--${state.status.toLowerCase()}`}>{state.status}</span>}
+        {state && <span className="turn-counter">turn {state.turn}</span>}
       </div>
 
       {error && <p className="error">Error: {error}</p>}
 
       <MessageLog messages={state?.messages} />
+
+      {state?.status === 'FULFILLED' && <InvoiceBlock invoice={state.invoice} />}
     </main>
   )
 }
