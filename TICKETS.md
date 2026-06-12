@@ -75,6 +75,15 @@ This contract lets UI tickets be built against a mock before the Backend endpoin
 - Preserve `_safe_insert` semantics: if a ClickHouse insert fails, log the error to console and continue — telemetry must never block the negotiation. Keep `log_message` / `log_tool_execution` signatures unchanged so BE-2/BE-4 call sites don't need to change.
 - **Depends on**: BE-1 (independent of BE-2/BE-4, which already call `telemetry.log_message` / `log_tool_execution`).
 
+### BE-8 — Mock Stripe Payment Tool (Payment Request & Payment Initiation)
+- BE-4's `app/payments.py` stub returns a fresh, unrelated `payment_intent_id` from `authorize_payment` instead of confirming the one created by `create_payment_request` — fix this by giving the mock tool an in-memory `PaymentIntent` store keyed by `payment_intent_id`.
+- `create_payment_request` (Vendor's payment-request tool): create and store a Stripe-shaped `PaymentIntent` (`id`, `object`, `amount` in cents, `currency`, `status="requires_confirmation"`, `created`); return it.
+- `authorize_payment` (Buyer's payment-initiation/confirmation tool): look up the stored `PaymentIntent` by `payment_intent_id`, validate `authorized_amount` matches `amount`, then transition `status` to `"succeeded"`.
+- Raise a `PaymentValidationError` for an unknown `payment_intent_id` or an amount mismatch. Update `graph.py`'s `_run_payment_tool` to catch this separately and log `execution_status="ValidationError"` (the enum value already defined in `telemetry.py` / `INSTRUCTIONS.md` §7.2 but never used).
+- Update `graph.py`'s `payment_authorization` node to pass the `payment_intent_id` from the invoice (set by `payment_request`) through to `authorize_payment`, so the two calls reference the same mock `PaymentIntent`.
+- This stays a pure mock — no real Stripe keys needed. Swapping in the real Stripe SDK is a separate future ticket (mirrors BE-7 for ClickHouse).
+- **Depends on**: BE-4.
+
 ---
 
 ## UI Tickets (`UI/`)
