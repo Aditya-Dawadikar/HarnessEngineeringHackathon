@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { TypingIndicator } from './TypingIndicator.jsx'
 
 const SENDER_LABEL = {
   VendorAgent: 'VENDOR',
@@ -47,19 +48,31 @@ function Message({ msg }) {
   )
 }
 
-export function MessageLog({ messages }) {
+export function MessageLog({ messages, state, polling }) {
   const bottomRef = useRef(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messages, polling])
 
-  if (!messages?.length) return <p className="log-empty">No messages yet.</p>
+  const isEmpty = !messages?.length
 
   return (
-    <div className="log">
-      {messages.map((m, i) => <Message key={i} msg={m} />)}
-      <div ref={bottomRef} />
+    <div className={`log${isEmpty ? ' log--empty-state' : ''}`}>
+      {isEmpty ? (
+        <div className="log-empty">
+          <div className="log-empty__icon">⟳</div>
+          <p className="log-empty__text">
+            {polling ? 'Waiting for agents to start…' : 'Hit Start Negotiation to begin.'}
+          </p>
+        </div>
+      ) : (
+        <>
+          {messages.map((m, i) => <Message key={i} msg={m} />)}
+          <TypingIndicator state={state} polling={polling} />
+          <div ref={bottomRef} />
+        </>
+      )}
     </div>
   )
 }
