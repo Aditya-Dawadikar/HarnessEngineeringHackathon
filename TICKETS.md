@@ -1,0 +1,93 @@
+# Tickets: Agentic Negotiation & Procurement Platform (Hackathon POC)
+
+Companion to `INSTRUCTIONS.md`. Tickets are sized so Backend and UI agents can work in parallel. Tickets marked **[PLACEHOLDER]** depend on external integration details (Promise Platform, Stripe, ClickHouse) — **ask the user for those details when the ticket is picked up.** Do not guess or invent connection info.
+
+---
+
+## Shared API Contract (read this first)
+
+```
+POST /negotiations/start
+  -> 200 { "transaction_id": "<uuid>" }
+
+GET /negotiations/{transaction_id}
+  -> 200 {
+       "transaction_id": "<uuid>",
+       "status": "NEGOTIATING" | "AGREEMENT" | "PAYMENT_PENDING" | "FULFILLED" | "TERMINATED",
+       "turn": <int>,
+       "messages": [
+         {
+           "sender": "VendorAgent" | "BuyerAgent" | "System",
+           "text": "<string>",
+           "extracted_price": <number|null>,
+           "extracted_quantity": <number|null>,
+           "timestamp": "<ISO8601>"
+         }
+       ],
+       "invoice": { ... } | null
+     }
+```
+
+This contract lets UI tickets be built against a mock before the Backend endpoints exist.
+
+---
+
+## Backend Tickets (`Backend/`)
+
+### BE-1 — Project Scaffolding & Domain Config
+- FastAPI app skeleton + `requirements.txt` (`fastapi`, `uvicorn`, `langgraph`, `langchain-core`).
+- `app/config.py`: hardcoded Vendor/Buyer domain config per `INSTRUCTIONS.md` §2.
+- `app/main.py`: app instance + health check route.
+- **Depends on**: nothing. Do this first.
+
+### BE-2 — LangGraph Negotiation Graph
+- `app/graph.py`: `NegotiationState` TypedDict, nodes `buyer_agent`, `vendor_agent`, `guardrail_validator`, routing/edges, turn limit (`INSTRUCTIONS.md` §4).
+- Use a **mock LLM function** (returns canned offers/counters) for `buyer_agent` / `vendor_agent` initially so the graph can be built and tested without BE-3.
+- **Depends on**: BE-1.
+
+### BE-3 — Promise Platform LLM Client `[PLACEHOLDER]`
+- `app/llm_client.py`: `generate(system_prompt, messages) -> str` (`INSTRUCTIONS.md` §6).
+- **STOP**: Ask the user for the Promise Platform base URL, auth mechanism, request/response format, and model name(s) before writing the real client. Until then, leave a stub that raises `NotImplementedError`.
+- Once ready, swap into BE-2's agent nodes in place of the mock.
+- **Depends on**: BE-1 (independent of BE-2 until integration).
+
+### BE-4 — Stripe Payment Integration `[PLACEHOLDER]`
+- `app/payments.py`: `create_payment_request(...)`, `authorize_payment(...)` (`INSTRUCTIONS.md` §5).
+- Add `payment_request`, `payment_authorization`, `generate_invoice` nodes to the graph.
+- **STOP**: Ask the user for Stripe API keys/mode and preferred flow (PaymentIntents vs. Checkout) before implementing. Stub with a mock "always succeeds" implementation until then.
+- **Depends on**: BE-1, BE-2 (for node wiring).
+
+### BE-5 — ClickHouse Telemetry `[PLACEHOLDER]`
+- `app/telemetry.py`: `log_message(...)`, `log_tool_execution(...)`, table DDL (`INSTRUCTIONS.md` §7).
+- **STOP**: Ask the user for ClickHouse host/port/database/credentials before implementing the real client. Stub with console-logging no-ops until then.
+- Wire calls into all BE-2 / BE-4 nodes.
+- **Depends on**: BE-1 (independent until integration).
+
+### BE-6 — API Endpoints
+- `POST /negotiations/start` and `GET /negotiations/{transaction_id}` per the Shared API Contract above. In-memory `dict` state store.
+- **Depends on**: BE-2.
+
+---
+
+## UI Tickets (`UI/`)
+
+### UI-1 — Project Scaffolding
+- Vite + React app in `UI/`. Single page shell, minimal global CSS, no component library.
+- **Depends on**: nothing.
+
+### UI-2 — Negotiation Log Viewer
+- "Start Negotiation" button → `POST /negotiations/start`. Poll `GET /negotiations/{transaction_id}` every ~1s.
+- Render a scrolling message list (sender, text, price, quantity).
+- Can be built against a local mock of the Shared API Contract before BE-6 is ready.
+- **Depends on**: UI-1.
+
+### UI-3 — Status & Invoice Display
+- Status badge for `status`; invoice block rendered when `status === "FULFILLED"`.
+- **Depends on**: UI-2.
+
+---
+
+## Notes for All Tickets
+- This is a hackathon POC: no fallback/retry infrastructure, no auth, no persistence beyond in-memory state + ClickHouse.
+- **[PLACEHOLDER]** tickets must not invent connection details, API keys, or integration shapes — ask the user when the ticket is picked up.
+- **Git workflow** (see `INSTRUCTIONS.md` §11): work on a dedicated `ticket/<ID>-<slug>` branch off `master`, commit with clear messages referencing the ticket ID, and push that branch when the ticket is done. Never push directly to `master` — it must always stay in a working state.
