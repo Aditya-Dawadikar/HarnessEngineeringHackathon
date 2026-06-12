@@ -186,6 +186,19 @@
 .msg__meta  { color: #a3e635; font-size: 0.8rem; white-space: nowrap; }
 .msg__ts    { color: #4b5563; font-size: 0.72rem; white-space: nowrap; }
 
+.msg__action {
+  margin-left: 0.5rem;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 0.08rem 0.35rem;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+.msg__action--accept  { background: #052e16; color: #34d399; }
+.msg__action--counter { background: #1e293b; color: #60a5fa; }
+.msg__action--reject  { background: #3b0000; color: #f87171; }
+
 /* ── Turn counter ────────────────────────────────────── */
 .turn-counter {
   font-size: 0.78rem;
@@ -200,14 +213,29 @@
   padding: 1rem 1.25rem;
   background: #0a1f0a;
 }
+.invoice__head {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.75rem;
+}
 .invoice__title {
   font-size: 0.9rem;
   font-weight: 700;
   color: #4ade80;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  margin-bottom: 0.75rem;
 }
+.invoice__status {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  background: #3b2a00;
+  color: #f59e0b;
+}
+.invoice__status--paid { background: #052e16; color: #34d399; }
 .invoice__table { border-collapse: collapse; width: 100%; }
 .invoice__table tr + tr td { border-top: 1px solid #1a2a1a; }
 .invoice__label {

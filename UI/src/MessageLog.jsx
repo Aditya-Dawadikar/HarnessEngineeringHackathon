@@ -6,6 +6,19 @@ const SENDER_LABEL = {
   System:      'SYS',
 }
 
+// Backend appends a structured tag to each agent message, e.g.
+// "[OFFER price=8.57 quantity=200 action=ACCEPT]". Strip it for display and
+// pull the action out so we can show it as a chip.
+const OFFER_TAG = /\[OFFER price=[0-9.]+ quantity=[0-9]+ action=(ACCEPT|COUNTER|REJECT)\]/
+
+function parseOffer(text) {
+  const match = text.match(OFFER_TAG)
+  return {
+    clean: text.replace(OFFER_TAG, '').trim(),
+    action: match ? match[1] : null,
+  }
+}
+
 function fmt(val, prefix) {
   if (val == null) return null
   return `${prefix}${Number(val).toFixed(2)}`
@@ -13,13 +26,17 @@ function fmt(val, prefix) {
 
 function Message({ msg }) {
   const label = SENDER_LABEL[msg.sender] ?? msg.sender
+  const { clean, action } = parseOffer(msg.text)
   const price = fmt(msg.extracted_price, '$')
   const qty   = msg.extracted_quantity != null ? `×${msg.extracted_quantity}` : null
 
   return (
     <div className={`msg msg--${msg.sender.toLowerCase()}`}>
       <span className="msg__sender">[{label}]</span>
-      <span className="msg__text">{msg.text}</span>
+      <span className="msg__text">
+        {clean}
+        {action && <span className={`msg__action msg__action--${action.toLowerCase()}`}>{action}</span>}
+      </span>
       {(price || qty) && (
         <span className="msg__meta">
           {[price, qty].filter(Boolean).join('  ')}
