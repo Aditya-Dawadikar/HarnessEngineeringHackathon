@@ -127,7 +127,6 @@ This contract lets UI tickets be built against a mock before the Backend endpoin
 - Add a test in `tests/test_main.py` asserting the response shape.
 - Closes the gap left by UI-4 — see UI-7.
 - **Depends on**: BE-1.
-
 ---
 
 ## UI Tickets (`UI/`)
