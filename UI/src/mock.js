@@ -47,6 +47,27 @@ function buildInvoice() {
 
 let _state = null
 
+export function mockConfig() {
+  return Promise.resolve({
+    vendor: {
+      agent_id: 'VendorAgent',
+      company: 'Acme Supplies Co.',
+      product: { id: 'PROD-1001', name: 'Industrial Widget', description: 'Heavy-duty steel widget, grade A', unit: 'pcs' },
+      stock_quantity: 500,
+      floor_price: 8.00,
+      ceiling_price: 12.00,
+    },
+    buyer: {
+      agent_id: 'BuyerAgent',
+      company: 'BuildCorp Ltd.',
+      product: { id: 'PROD-1001', name: 'Industrial Widget', unit: 'pcs' },
+      desired_quantity: 200,
+      floor_price: 7.00,
+      ceiling_price: 10.00,
+    },
+  })
+}
+
 export function mockStart() {
   _tick = 0
   _state = {

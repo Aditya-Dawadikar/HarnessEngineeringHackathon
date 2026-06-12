@@ -22,3 +22,8 @@ export async function fetchNegotiation(transactionId) {
   const res = await fetch(`${BASE}/negotiations/${transactionId}`)
   return parseJSON(res, 'fetch')
 }
+
+export async function fetchConfig() {
+  const res = await fetch(`${BASE}/config`)
+  return parseJSON(res, 'config')
+}

@@ -39,6 +39,39 @@ def start_negotiation(background_tasks: BackgroundTasks):
     return {"transaction_id": transaction_id}
 
 
+@app.get("/config")
+def get_config():
+    v = VENDOR_CONFIG
+    b = BUYER_CONFIG
+    return {
+        "vendor": {
+            "agent_id": v["agent_id"],
+            "company": v["company"],
+            "product": {
+                "id": v["Product_ID"],
+                "name": v["product_name"],
+                "description": v["product_description"],
+                "unit": v["product_unit"],
+            },
+            "stock_quantity": v["Stock_Quantity"],
+            "floor_price": v["Floor_Price"],
+            "ceiling_price": v["Ceiling_Price"],
+        },
+        "buyer": {
+            "agent_id": b["agent_id"],
+            "company": b["company"],
+            "product": {
+                "id": b["Target_Product_ID"],
+                "name": b["product_name"],
+                "unit": b["product_unit"],
+            },
+            "desired_quantity": b["Desired_Quantity"],
+            "floor_price": b["Buyer_Floor_Price"],
+            "ceiling_price": b["Buyer_Ceiling_Price"],
+        },
+    }
+
+
 @app.get("/negotiations/{transaction_id}")
 def get_negotiation(transaction_id: str):
     state = NEGOTIATIONS.get(transaction_id)
