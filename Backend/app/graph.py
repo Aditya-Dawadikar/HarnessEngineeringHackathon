@@ -334,7 +334,8 @@ def payment_authorization(state: NegotiationState) -> dict:
         tool_fn=payments.authorize_payment,
     )
 
-    return {"status": "FULFILLED", "invoice": {**invoice, **payload, **result}}
+    status = "FULFILLED" if result.get("payment_status") == "succeeded" else "TERMINATED"
+    return {"status": status, "invoice": {**invoice, **payload, **result}}
 
 
 def generate_invoice(state: NegotiationState) -> dict:

@@ -16,14 +16,14 @@ Companion to `INSTRUCTIONS.md`. Tickets are sized so Backend and UI agents can w
 | BE-6 | Negotiation API endpoints | ✅ Done |
 | BE-7 | Finalize ClickHouse telemetry integration | ✅ Done |
 | BE-8 | Mock Stripe payment tool (PaymentIntent lifecycle) | ✅ Done |
-| BE-9 | Expose vendor/buyer config via `GET /config` | 🚧 In progress |
+| BE-9 | Expose vendor/buyer config via `GET /config` | ✅ Done |
 | UI-1 | Project scaffolding | ✅ Done |
 | UI-2 | Negotiation log viewer | ✅ Done |
 | UI-3 | Status badge & invoice block | ✅ Done |
-| UI-4 | Negotiation context panels (inventory cards + price bar) | ✅ Done (static data — see UI-7) |
+| UI-4 | Negotiation context panels (inventory cards + price bar) | ✅ Done |
 | UI-5 | Integrate UI with real FastAPI backend | ✅ Done |
 | UI-6 | Polish (typing indicator, TERMINATED banner, fade-in, empty state) | ✅ Done |
-| UI-7 | Wire negotiation context panel to live `GET /config` | 🚧 In progress |
+| UI-7 | Wire negotiation context panel to live `GET /config` | ✅ Done |
 
 ---
 
