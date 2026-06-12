@@ -1,6 +1,7 @@
 import { useNegotiation } from './useNegotiation.js'
 import { MessageLog } from './MessageLog.jsx'
 import { InvoiceBlock } from './InvoiceBlock.jsx'
+import { InventoryContext } from './InventoryContext.jsx'
 import './App.css'
 
 export default function App() {
@@ -9,6 +10,8 @@ export default function App() {
   return (
     <main>
       <h1>Agentic Negotiation Platform</h1>
+
+      <InventoryContext />
 
       <div className="toolbar">
         <button className="btn-start" onClick={start} disabled={loading}>
