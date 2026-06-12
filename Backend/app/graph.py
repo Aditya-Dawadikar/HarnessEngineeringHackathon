@@ -14,6 +14,8 @@ from typing import Literal, Optional, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
+from app import telemetry
+
 MAX_TURNS = 10
 CONVERGENCE_THRESHOLD = 0.5
 
@@ -108,7 +110,19 @@ def buyer_agent(state: NegotiationState) -> dict:
         f"I'd like to buy {quantity} units at ${price:.2f} per unit. "
         f"[OFFER price={price:.2f} quantity={quantity} action={action}]"
     )
-    return {"messages": state["messages"] + [_build_message("BuyerAgent", text)]}
+    message = _build_message("BuyerAgent", text)
+    telemetry.log_message(
+        transaction_id=state["transaction_id"],
+        conversation_turn=state["turn"] + 1,
+        sender_type="BuyerAgent",
+        sender_id="BuyerAgent",
+        receiver_id="VendorAgent",
+        raw_message=text,
+        extracted_price=message["extracted_price"],
+        extracted_quantity=message["extracted_quantity"],
+        llm_metadata={"source": "mock_llm", "action": action},
+    )
+    return {"messages": state["messages"] + [message]}
 
 
 def vendor_agent(state: NegotiationState) -> dict:
@@ -119,7 +133,19 @@ def vendor_agent(state: NegotiationState) -> dict:
         f"I can supply {quantity} units at ${price:.2f} per unit. "
         f"[OFFER price={price:.2f} quantity={quantity} action={action}]"
     )
-    return {"messages": state["messages"] + [_build_message("VendorAgent", text)]}
+    message = _build_message("VendorAgent", text)
+    telemetry.log_message(
+        transaction_id=state["transaction_id"],
+        conversation_turn=state["turn"] + 1,
+        sender_type="VendorAgent",
+        sender_id="VendorAgent",
+        receiver_id="BuyerAgent",
+        raw_message=text,
+        extracted_price=message["extracted_price"],
+        extracted_quantity=message["extracted_quantity"],
+        llm_metadata={"source": "mock_llm", "action": action},
+    )
+    return {"messages": state["messages"] + [message]}
 
 
 def guardrail_validator(state: NegotiationState) -> dict:
@@ -148,6 +174,18 @@ def guardrail_validator(state: NegotiationState) -> dict:
         status = "AGREEMENT"
     else:
         status = "NEGOTIATING"
+
+    telemetry.log_message(
+        transaction_id=state["transaction_id"],
+        conversation_turn=turn,
+        sender_type="System",
+        sender_id="GuardrailValidator",
+        receiver_id="System",
+        raw_message=f"status={status} action={action}",
+        extracted_price=price,
+        extracted_quantity=quantity,
+        llm_metadata={"action": action},
+    )
 
     update: dict = {"turn": turn, "status": status}
     if price is not None:

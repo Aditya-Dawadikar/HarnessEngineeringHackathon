@@ -3,6 +3,7 @@ from app.graph import (
     MAX_TURNS,
     build_graph,
     build_initial_state,
+    buyer_agent,
     guardrail_validator,
     parse_offer,
     route_after_guardrail,
@@ -122,3 +123,30 @@ def test_negotiation_graph_converges_to_agreement_within_bounds():
 
     assert final_state["status"] == "AGREEMENT"
     assert VENDOR_CONFIG["Floor_Price"] <= final_state["current_price"] <= BUYER_CONFIG["Buyer_Ceiling_Price"]
+
+
+def test_buyer_agent_logs_message_via_telemetry(monkeypatch):
+    logged = []
+    monkeypatch.setattr(
+        "app.graph.telemetry.log_message", lambda **kwargs: logged.append(kwargs)
+    )
+
+    initial_state = build_initial_state("txn-1", VENDOR_CONFIG, BUYER_CONFIG)
+    buyer_agent(initial_state)
+
+    assert len(logged) == 1
+    assert logged[0]["transaction_id"] == "txn-1"
+    assert logged[0]["sender_type"] == "BuyerAgent"
+
+
+def test_guardrail_validator_logs_system_message_via_telemetry(monkeypatch):
+    logged = []
+    monkeypatch.setattr(
+        "app.graph.telemetry.log_message", lambda **kwargs: logged.append(kwargs)
+    )
+
+    state = _state_with_messages([_message("BuyerAgent", 8.00, 200, "COUNTER")])
+    guardrail_validator(state)
+
+    assert len(logged) == 1
+    assert logged[0]["sender_type"] == "System"
