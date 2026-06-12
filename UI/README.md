@@ -1,16 +1,47 @@
-# React + Vite
+# UI — Agentic Negotiation Platform
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Single-page React (Vite) app that triggers a negotiation and renders the live
+agent chat, status, inventory context, and final invoice. Talks to the FastAPI
+backend in `../Backend`.
 
-Currently, two official plugins are available:
+## Install
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```bash
+cd UI
+npm install
+```
 
-## React Compiler
+## Run against the real backend
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. Start the backend (see `../Backend/README.md`) — it listens on `:8000`.
+2. Start the UI:
 
-## Expanding the ESLint configuration
+   ```bash
+   npm run dev
+   ```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+3. Open the printed URL (e.g. http://localhost:5173) and click **Start Negotiation**.
+
+API calls use a **relative base** and are forwarded to the backend by the Vite
+dev proxy (`vite.config.js`), so there are no CORS issues. If the backend runs
+elsewhere, set `VITE_BACKEND_URL` (proxy target) or `VITE_API_BASE` (direct
+fetch base).
+
+## Run without a backend (mock mode)
+
+```bash
+VITE_USE_MOCK=true npm run dev
+```
+
+`src/mock.js` replays a scripted negotiation whose message and invoice shapes
+mirror the real backend, so the UI behaves identically without credentials or a
+running server.
+
+## How it maps to the API
+
+- `POST /negotiations/start` → `{ transaction_id }`
+- `GET /negotiations/{id}` polled every ~1s → `{ status, turn, messages[], invoice }`
+- Agent messages carry a `[OFFER price=.. quantity=.. action=..]` tag; the log
+  strips it for display and shows the action (ACCEPT/COUNTER/REJECT) as a chip.
+- The invoice block renders when `status === "FULFILLED"` using the backend's
+  invoice fields (`agreed_unit_price`, `total_amount`, `payment_status`, …).

@@ -1,35 +1,47 @@
-// Local mock of the Shared API Contract for development before BE-6 is ready.
-// Import useNegotiation from useNegotiation.js — it switches to real API when
-// VITE_USE_MOCK is not set to "true".
+// Local mock of the Shared API Contract for development without the backend.
+// Shapes mirror the REAL backend (Backend/app/graph.py): agent messages carry a
+// raw "[OFFER price=.. quantity=.. action=..]" tag, and the invoice uses the
+// keys produced by payment_request → payment_authorization → generate_invoice.
+// Enable with VITE_USE_MOCK=true.
 
 let _tick = 0
 
 const SCRIPT = [
-  { sender: 'BuyerAgent',  text: 'I would like 50 units at $10.00 each.',      extracted_price: 10.00,  extracted_quantity: 50  },
-  { sender: 'VendorAgent', text: 'Our floor is $14.00. Best I can do is $14.',  extracted_price: 14.00,  extracted_quantity: 50  },
-  { sender: 'BuyerAgent',  text: 'I can go up to $12.50.',                      extracted_price: 12.50,  extracted_quantity: 50  },
-  { sender: 'VendorAgent', text: 'Meet me at $13.00 and we have a deal.',       extracted_price: 13.00,  extracted_quantity: 50  },
-  { sender: 'BuyerAgent',  text: 'Agreed. $13.00 for 50 units.',               extracted_price: 13.00,  extracted_quantity: 50  },
-  { sender: 'System',      text: 'Agreement reached. Initiating payment.',      extracted_price: null,   extracted_quantity: null },
-  { sender: 'System',      text: 'Payment authorized. Invoice generated.',      extracted_price: null,   extracted_quantity: null },
+  { sender: 'BuyerAgent',  price: 7.00, qty: 200, action: 'COUNTER', lead: "I'd like to buy 200 units at $7.00 per unit." },
+  { sender: 'VendorAgent', price: 9.50, qty: 200, action: 'COUNTER', lead: 'I can supply 200 units at $9.50 per unit.' },
+  { sender: 'BuyerAgent',  price: 8.25, qty: 200, action: 'COUNTER', lead: "I'd like to buy 200 units at $8.25 per unit." },
+  { sender: 'VendorAgent', price: 8.88, qty: 200, action: 'COUNTER', lead: 'I can supply 200 units at $8.88 per unit.' },
+  { sender: 'BuyerAgent',  price: 8.57, qty: 200, action: 'COUNTER', lead: "I'd like to buy 200 units at $8.57 per unit." },
+  { sender: 'VendorAgent', price: 8.57, qty: 200, action: 'ACCEPT',  lead: 'I can supply 200 units at $8.57 per unit.' },
 ]
 
-function statusAt(tick) {
-  if (tick < 5) return 'NEGOTIATING'
-  if (tick === 5) return 'AGREEMENT'
-  if (tick === 6) return 'PAYMENT_PENDING'
-  return 'FULFILLED'
+const AGREED_PRICE = 8.57
+const AGREED_QTY = 200
+
+function scriptMessage({ sender, price, qty, action, lead }) {
+  return {
+    sender,
+    text: `${lead} [OFFER price=${price.toFixed(2)} quantity=${qty} action=${action}]`,
+    extracted_price: price,
+    extracted_quantity: qty,
+    timestamp: new Date().toISOString(),
+  }
 }
 
-function invoiceAt(tick) {
-  if (tick < 7) return null
+function buildInvoice() {
+  const total = Number((AGREED_PRICE * AGREED_QTY).toFixed(2))
   return {
     transaction_id: 'mock-0000-0001',
-    product_id: 'PROD-001',
-    agreed_unit_price: 13.00,
-    quantity: 50,
-    total_amount: 650.00,
-    issued_at: new Date().toISOString(),
+    buyer_agent_id: 'BuyerAgent',
+    product_id: 'PROD-1001',
+    agreed_unit_price: AGREED_PRICE,
+    quantity: AGREED_QTY,
+    total_amount: total,
+    payment_intent_id: 'pi_mock_0000000000000000000001',
+    payment_status: 'succeeded',
+    payment_method_token: 'tok_mock_visa',
+    authorized_amount: total,
+    unit_price: AGREED_PRICE,
   }
 }
 
@@ -50,20 +62,12 @@ export function mockStart() {
 export function mockFetch() {
   if (!_state) return Promise.reject(new Error('no active negotiation'))
   if (_tick < SCRIPT.length) {
-    const { sender, text, extracted_price, extracted_quantity } = SCRIPT[_tick]
-    _state.messages = [
-      ..._state.messages,
-      { sender, text, extracted_price, extracted_quantity, timestamp: new Date().toISOString() },
-    ]
+    _state.messages = [..._state.messages, scriptMessage(SCRIPT[_tick])]
     _state.turn = _tick + 1
-    _state.status = statusAt(_tick)
-    _state.invoice = invoiceAt(_tick)
+    // last script entry is the ACCEPT → deal closes and payment settles
+    _state.status = _tick === SCRIPT.length - 1 ? 'FULFILLED' : 'NEGOTIATING'
+    _state.invoice = _state.status === 'FULFILLED' ? buildInvoice() : null
     _tick += 1
-    // once script is exhausted, lock in terminal state
-    if (_tick >= SCRIPT.length) {
-      _state.status = 'FULFILLED'
-      _state.invoice = invoiceAt(_tick)
-    }
   }
   return Promise.resolve({ ..._state, messages: [..._state.messages] })
 }
