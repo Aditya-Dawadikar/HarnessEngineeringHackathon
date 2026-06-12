@@ -14,7 +14,7 @@ Companion to `INSTRUCTIONS.md`. Tickets are sized so Backend and UI agents can w
 | BE-4 | Stripe payment integration stub | ✅ Done |
 | BE-5 | ClickHouse telemetry stub | ✅ Done |
 | BE-6 | Negotiation API endpoints | ✅ Done |
-| BE-7 | Finalize ClickHouse telemetry integration | ⏳ Blocked — needs `CLICKHOUSE_HOST`/`PORT`/`DATABASE` from user |
+| BE-7 | Finalize ClickHouse telemetry integration | ✅ Done |
 | BE-8 | Mock Stripe payment tool (PaymentIntent lifecycle) | ✅ Done |
 | BE-9 | Expose vendor/buyer config via `GET /config` | 🚧 In progress |
 | UI-1 | Project scaffolding | ✅ Done |
