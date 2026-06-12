@@ -1,6 +1,8 @@
 from app.config import BUYER_CONFIG, VENDOR_CONFIG
 from app.graph import (
     MAX_TURNS,
+    _build_system_prompt,
+    _conversation_messages,
     build_graph,
     build_initial_state,
     buyer_agent,
@@ -10,6 +12,7 @@ from app.graph import (
     payment_authorization,
     payment_request,
     route_after_guardrail,
+    vendor_agent,
 )
 
 
@@ -28,6 +31,10 @@ def _message(sender, price, quantity, action):
         "extracted_quantity": quantity,
         "timestamp": "2026-01-01T00:00:00+00:00",
     }
+
+
+def _raise_not_implemented(*args, **kwargs):
+    raise NotImplementedError("Promise Platform not configured")
 
 
 def test_parse_offer_extracts_price_quantity_and_action():
@@ -204,3 +211,84 @@ def test_generate_invoice_builds_invoice_from_agreed_terms():
     assert invoice["unit_price"] == 9.0
     assert invoice["quantity"] == 200
     assert invoice["total_amount"] == 1800.0
+
+
+def test_conversation_messages_maps_own_and_other_sender_roles_and_appends_prompt():
+    state = _state_with_messages(
+        [
+            _message("BuyerAgent", 7.00, 200, "COUNTER"),
+            _message("VendorAgent", 11.00, 200, "COUNTER"),
+        ]
+    )
+
+    messages = _conversation_messages(state, "BuyerAgent")
+
+    assert messages[0] == {"role": "assistant", "content": state["messages"][0]["text"]}
+    assert messages[1] == {"role": "user", "content": state["messages"][1]["text"]}
+    assert messages[-1]["role"] == "user"
+
+
+def test_buyer_system_prompt_includes_buyer_bounds_and_offer_format():
+    prompt = _build_system_prompt("BuyerAgent", VENDOR_CONFIG, BUYER_CONFIG)
+
+    assert f"{BUYER_CONFIG['Buyer_Ceiling_Price']:.2f}" in prompt
+    assert "[OFFER price=" in prompt
+
+
+def test_vendor_system_prompt_includes_vendor_bounds_and_offer_format():
+    prompt = _build_system_prompt("VendorAgent", VENDOR_CONFIG, BUYER_CONFIG)
+
+    assert f"{VENDOR_CONFIG['Floor_Price']:.2f}" in prompt
+    assert "[OFFER price=" in prompt
+
+
+def test_buyer_agent_uses_promise_platform_response_when_configured(monkeypatch):
+    monkeypatch.setattr(
+        "app.graph.llm_client.generate",
+        lambda system_prompt, messages: "Let's start at $7.00. [OFFER price=7.00 quantity=200 action=COUNTER]",
+    )
+
+    initial_state = build_initial_state("txn-1", VENDOR_CONFIG, BUYER_CONFIG)
+    update = buyer_agent(initial_state)
+
+    message = update["messages"][-1]
+    assert message["text"] == "Let's start at $7.00. [OFFER price=7.00 quantity=200 action=COUNTER]"
+    assert message["extracted_price"] == 7.00
+    assert message["extracted_quantity"] == 200
+
+
+def test_buyer_agent_falls_back_to_mock_when_promise_platform_not_configured(monkeypatch):
+    monkeypatch.setattr("app.graph.llm_client.generate", _raise_not_implemented)
+
+    initial_state = build_initial_state("txn-1", VENDOR_CONFIG, BUYER_CONFIG)
+    update = buyer_agent(initial_state)
+
+    message = update["messages"][-1]
+    assert message["extracted_price"] == BUYER_CONFIG["Buyer_Floor_Price"]
+    assert message["extracted_quantity"] == BUYER_CONFIG["Desired_Quantity"]
+
+
+def test_vendor_agent_uses_promise_platform_response_when_configured(monkeypatch):
+    monkeypatch.setattr(
+        "app.graph.llm_client.generate",
+        lambda system_prompt, messages: "I can do $11.00. [OFFER price=11.00 quantity=200 action=COUNTER]",
+    )
+
+    state = _state_with_messages([_message("BuyerAgent", 7.00, 200, "COUNTER")])
+    update = vendor_agent(state)
+
+    message = update["messages"][-1]
+    assert message["text"] == "I can do $11.00. [OFFER price=11.00 quantity=200 action=COUNTER]"
+    assert message["extracted_price"] == 11.00
+    assert message["extracted_quantity"] == 200
+
+
+def test_vendor_agent_falls_back_to_mock_when_promise_platform_not_configured(monkeypatch):
+    monkeypatch.setattr("app.graph.llm_client.generate", _raise_not_implemented)
+
+    state = _state_with_messages([_message("BuyerAgent", 7.00, 200, "COUNTER")])
+    update = vendor_agent(state)
+
+    message = update["messages"][-1]
+    assert message["extracted_price"] == round((VENDOR_CONFIG["Ceiling_Price"] + 7.00) / 2, 2)
+    assert message["extracted_quantity"] == 200
