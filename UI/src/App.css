@@ -1,1 +1,84 @@
-/* placeholder — component styles added in UI-2/UI-3 */
+/* ── Toolbar ─────────────────────────────────────────── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.btn-start {
+  padding: 0.45rem 1.1rem;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.btn-start:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-start:hover:not(:disabled) { background: #1d4ed8; }
+
+/* ── Status badge ────────────────────────────────────── */
+.badge {
+  padding: 0.25rem 0.65rem;
+  border-radius: 3px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.badge--negotiating   { background: #1e3a5f; color: #60a5fa; }
+.badge--agreement     { background: #14532d; color: #4ade80; }
+.badge--payment_pending { background: #451a03; color: #fb923c; }
+.badge--fulfilled     { background: #052e16; color: #34d399; }
+.badge--terminated    { background: #3b0000; color: #f87171; }
+
+/* ── Error ───────────────────────────────────────────── */
+.error {
+  color: #f87171;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+/* ── Message log ─────────────────────────────────────── */
+.log {
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  padding: 0.75rem;
+  max-height: 420px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.log-empty {
+  color: #555;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.msg {
+  display: grid;
+  grid-template-columns: 3.5rem 1fr auto auto;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: 3px;
+}
+.msg--system { background: #1a1a1a; }
+
+.msg__sender {
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.msg--vendoragent .msg__sender { color: #f59e0b; }
+.msg--buyeragent  .msg__sender { color: #38bdf8; }
+.msg--system      .msg__sender { color: #6b7280; }
+
+.msg__text  { color: #d1d5db; }
+.msg__meta  { color: #a3e635; font-size: 0.8rem; white-space: nowrap; }
+.msg__ts    { color: #4b5563; font-size: 0.72rem; white-space: nowrap; }
