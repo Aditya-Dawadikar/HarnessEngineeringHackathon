@@ -273,6 +273,10 @@ def _run_payment_tool(state: NegotiationState, *, agent_id: str, tool_name: str,
         result = tool_fn(**payload)
         execution_status = "Success"
         error_message = ""
+    except payments.PaymentValidationError as exc:
+        result = {}
+        execution_status = "ValidationError"
+        error_message = str(exc)
     except Exception as exc:
         result = {}
         execution_status = "Failed"
@@ -317,6 +321,7 @@ def payment_authorization(state: NegotiationState) -> dict:
     invoice = dict(state["invoice"] or {})
     payload = {
         "transaction_id": state["transaction_id"],
+        "payment_intent_id": invoice.get("payment_intent_id"),
         "payment_method_token": "tok_mock_visa",
         "authorized_amount": invoice.get("total_amount"),
     }
