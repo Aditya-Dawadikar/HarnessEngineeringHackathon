@@ -59,6 +59,11 @@ export function mockFetch() {
     _state.status = statusAt(_tick)
     _state.invoice = invoiceAt(_tick)
     _tick += 1
+    // once script is exhausted, lock in terminal state
+    if (_tick >= SCRIPT.length) {
+      _state.status = 'FULFILLED'
+      _state.invoice = invoiceAt(_tick)
+    }
   }
   return Promise.resolve({ ..._state, messages: [..._state.messages] })
 }
