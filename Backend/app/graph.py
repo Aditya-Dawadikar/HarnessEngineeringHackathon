@@ -2,10 +2,13 @@
 
 See INSTRUCTIONS.md Section 3 (protocol) and Section 4 (orchestration design).
 
-Both agent nodes use a mock LLM (see `_next_offer`) that produces canned
-offers/counters by moving each side's price toward the other's last offer
-until the gap closes, at which point it accepts. This lets the graph be
-built and tested without the Promise Platform client (BE-3).
+Both agent nodes call the Promise Platform LLM (`app.llm_client.generate`)
+with a role-specific system prompt and the conversation history. If the
+Promise Platform is not configured (`NotImplementedError`), the nodes fall
+back to a mock LLM (see `_next_offer`) that produces canned offers/counters
+by moving each side's price toward the other's last offer until the gap
+closes, at which point it accepts. This lets the graph be built and tested
+without real Promise Platform credentials (BE-3).
 """
 
 import re
@@ -14,7 +17,7 @@ from typing import Literal, Optional, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from app import payments, telemetry
+from app import llm_client, payments, telemetry
 
 MAX_TURNS = 10
 CONVERGENCE_THRESHOLD = 0.5
@@ -102,15 +105,78 @@ def _next_offer(state: NegotiationState, *, sender: str, anchor_price: float) ->
     return round((own_price + other_price) / 2, 2), "COUNTER"
 
 
+_NEGOTIATION_INSTRUCTIONS = (
+    "Negotiate to get the best possible price. Keep replies short -- one or two sentences.\n"
+    "Every reply MUST end with exactly one structured tag in this format:\n"
+    "[OFFER price=X.XX quantity=N action=ACCEPT|COUNTER|REJECT]\n\n"
+    "- action=ACCEPT: you agree to the other side's last offer (echo their price and quantity).\n"
+    "- action=COUNTER: you are proposing a different price.\n"
+    "- action=REJECT: you are walking away from the deal."
+)
+
+
+def _build_system_prompt(sender: str, vendor_config: dict, buyer_config: dict) -> str:
+    if sender == "BuyerAgent":
+        return (
+            f"You are BuyerAgent, an autonomous procurement agent negotiating the purchase "
+            f"of product {buyer_config['Target_Product_ID']}.\n"
+            f"You want to buy {buyer_config['Desired_Quantity']} units.\n"
+            f"Your hard ceiling is ${buyer_config['Buyer_Ceiling_Price']:.2f} per unit -- "
+            f"you must never accept or offer a price above this.\n"
+            f"Your ideal opening price is ${buyer_config['Buyer_Floor_Price']:.2f} per unit.\n\n"
+            f"{_NEGOTIATION_INSTRUCTIONS}"
+        )
+
+    return (
+        f"You are VendorAgent, an autonomous sales agent negotiating the sale "
+        f"of product {vendor_config['Product_ID']}.\n"
+        f"You have {vendor_config['Stock_Quantity']} units in stock.\n"
+        f"Your hard floor is ${vendor_config['Floor_Price']:.2f} per unit -- "
+        f"you must never accept or offer a price below this.\n"
+        f"Your ideal opening price is ${vendor_config['Ceiling_Price']:.2f} per unit.\n\n"
+        f"{_NEGOTIATION_INSTRUCTIONS}"
+    )
+
+
+def _conversation_messages(state: NegotiationState, sender: str) -> list[dict]:
+    other_sender = "VendorAgent" if sender == "BuyerAgent" else "BuyerAgent"
+    messages: list[dict] = []
+    for message in state["messages"]:
+        if message["sender"] == sender:
+            messages.append({"role": "assistant", "content": message["text"]})
+        elif message["sender"] == other_sender:
+            messages.append({"role": "user", "content": message["text"]})
+    messages.append(
+        {"role": "user", "content": "Continue the negotiation. Respond with your message and offer tag now."}
+    )
+    return messages
+
+
+def _llm_offer_text(state: NegotiationState, sender: str) -> Optional[str]:
+    try:
+        system_prompt = _build_system_prompt(sender, state["vendor_config"], state["buyer_config"])
+        messages = _conversation_messages(state, sender)
+        return llm_client.generate(system_prompt, messages)
+    except NotImplementedError:
+        return None
+
+
 def buyer_agent(state: NegotiationState) -> dict:
     config = state["buyer_config"]
-    price, action = _next_offer(state, sender="BuyerAgent", anchor_price=config["Buyer_Floor_Price"])
-    quantity = config["Desired_Quantity"]
-    text = (
-        f"I'd like to buy {quantity} units at ${price:.2f} per unit. "
-        f"[OFFER price={price:.2f} quantity={quantity} action={action}]"
-    )
+    text = _llm_offer_text(state, "BuyerAgent")
+    if text is not None:
+        source = "promise_platform"
+    else:
+        price, action = _next_offer(state, sender="BuyerAgent", anchor_price=config["Buyer_Floor_Price"])
+        quantity = config["Desired_Quantity"]
+        text = (
+            f"I'd like to buy {quantity} units at ${price:.2f} per unit. "
+            f"[OFFER price={price:.2f} quantity={quantity} action={action}]"
+        )
+        source = "mock_llm"
+
     message = _build_message("BuyerAgent", text)
+    _, _, action = parse_offer(text)
     telemetry.log_message(
         transaction_id=state["transaction_id"],
         conversation_turn=state["turn"] + 1,
@@ -120,20 +186,27 @@ def buyer_agent(state: NegotiationState) -> dict:
         raw_message=text,
         extracted_price=message["extracted_price"],
         extracted_quantity=message["extracted_quantity"],
-        llm_metadata={"source": "mock_llm", "action": action},
+        llm_metadata={"source": source, "action": action},
     )
     return {"messages": state["messages"] + [message]}
 
 
 def vendor_agent(state: NegotiationState) -> dict:
     config = state["vendor_config"]
-    price, action = _next_offer(state, sender="VendorAgent", anchor_price=config["Ceiling_Price"])
-    quantity = _last_message_from(state, "BuyerAgent")["extracted_quantity"]
-    text = (
-        f"I can supply {quantity} units at ${price:.2f} per unit. "
-        f"[OFFER price={price:.2f} quantity={quantity} action={action}]"
-    )
+    text = _llm_offer_text(state, "VendorAgent")
+    if text is not None:
+        source = "promise_platform"
+    else:
+        price, action = _next_offer(state, sender="VendorAgent", anchor_price=config["Ceiling_Price"])
+        quantity = _last_message_from(state, "BuyerAgent")["extracted_quantity"]
+        text = (
+            f"I can supply {quantity} units at ${price:.2f} per unit. "
+            f"[OFFER price={price:.2f} quantity={quantity} action={action}]"
+        )
+        source = "mock_llm"
+
     message = _build_message("VendorAgent", text)
+    _, _, action = parse_offer(text)
     telemetry.log_message(
         transaction_id=state["transaction_id"],
         conversation_turn=state["turn"] + 1,
@@ -143,7 +216,7 @@ def vendor_agent(state: NegotiationState) -> dict:
         raw_message=text,
         extracted_price=message["extracted_price"],
         extracted_quantity=message["extracted_quantity"],
-        llm_metadata={"source": "mock_llm", "action": action},
+        llm_metadata={"source": source, "action": action},
     )
     return {"messages": state["messages"] + [message]}
 
