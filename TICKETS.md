@@ -67,6 +67,14 @@ This contract lets UI tickets be built against a mock before the Backend endpoin
 - `POST /negotiations/start` and `GET /negotiations/{transaction_id}` per the Shared API Contract above. In-memory `dict` state store.
 - **Depends on**: BE-2.
 
+### BE-7 — Finalize ClickHouse Telemetry Integration
+- Replace `app/telemetry.py`'s console-logging `_insert` with a real ClickHouse client (e.g. `clickhouse-connect`) writing to the `agent_message_logs` / `agent_tool_executions` tables (DDL already defined in `app/telemetry.py` / `INSTRUCTIONS.md` §7). Create the tables on startup if they don't exist.
+- Config via env vars: `CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`, `CLICKHOUSE_DATABASE`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`, `CLICKHOUSE_SECURE`.
+  - `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` are already in `.env` (from `clickhouse_credentials.txt`, gitignored).
+  - **STOP**: `CLICKHOUSE_HOST` / `CLICKHOUSE_PORT` / `CLICKHOUSE_DATABASE` are still unknown — ask the user before writing the real client.
+- Preserve `_safe_insert` semantics: if a ClickHouse insert fails, log the error to console and continue — telemetry must never block the negotiation. Keep `log_message` / `log_tool_execution` signatures unchanged so BE-2/BE-4 call sites don't need to change.
+- **Depends on**: BE-1 (independent of BE-2/BE-4, which already call `telemetry.log_message` / `log_tool_execution`).
+
 ---
 
 ## UI Tickets (`UI/`)

@@ -16,6 +16,9 @@ build/
 .env
 .env.*
 
+# Credential dumps
+*_credentials.txt
+
 # Claude Code local settings
 .claude/settings.local.json
 
