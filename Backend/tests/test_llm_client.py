@@ -4,6 +4,36 @@ from app import llm_client
 from app.llm_client import generate
 
 
+def test_env_prefers_first_name_when_set(monkeypatch):
+    monkeypatch.setenv("PROMISE_API_KEY", "promise-key")
+    monkeypatch.setenv("PIONEER_API_KEY", "pioneer-key")
+
+    assert llm_client._env("PROMISE_API_KEY", "PIONEER_API_KEY") == "promise-key"
+
+
+def test_env_falls_back_to_second_name_when_first_unset(monkeypatch):
+    monkeypatch.delenv("PROMISE_API_KEY", raising=False)
+    monkeypatch.setenv("PIONEER_API_KEY", "pioneer-key")
+
+    assert llm_client._env("PROMISE_API_KEY", "PIONEER_API_KEY") == "pioneer-key"
+
+
+def test_env_returns_default_when_none_set(monkeypatch):
+    monkeypatch.delenv("PROMISE_BASE_URL", raising=False)
+    monkeypatch.delenv("PIONEER_BASE_URL", raising=False)
+
+    assert (
+        llm_client._env("PROMISE_BASE_URL", "PIONEER_BASE_URL", default="https://api.pioneer.ai")
+        == "https://api.pioneer.ai"
+    )
+
+
+def test_default_model_is_a_model_pioneer_actually_serves():
+    # qwen2.5-72b-instruct (the original placeholder default) is not in
+    # Pioneer's /v1/models list and returns 404; gpt-4.1-mini is.
+    assert llm_client.PROMISE_MODEL == "gpt-4.1-mini"
+
+
 def test_generate_raises_not_implemented_when_api_key_missing(monkeypatch):
     monkeypatch.setattr(llm_client, "PROMISE_API_KEY", None)
 

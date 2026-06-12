@@ -41,9 +41,21 @@ Use this setup for creating our Vendor and Buyer Agents
   cover both the real-client request/response handling and the
   Promise-Platform / mock fallback paths. Full suite: 39/39 passing.
 
-### 3. Still needed from the user to go fully live
-- Set `PROMISE_API_KEY` (from pioneer.ai -> Settings -> API Keys) in a local
-  `.env` (gitignored) -- without it, agents keep using the mock LLM.
-- Optional: set `PROMISE_BASE_URL` (defaults to `https://api.pioneer.ai`)
-  and `PROMISE_MODEL` (defaults to `qwen2.5-72b-instruct` -- verify against
-  `GET /base-models` and adjust if a different chat model should be used).
+### 3. Live verification (2026-06-12)
+- `.env` already had `PIONEER_API_KEY` set (not `PROMISE_API_KEY`).
+  `llm_client.py` now reads `PROMISE_*` first and falls back to `PIONEER_*`
+  for `BASE_URL` / `API_KEY` / `MODEL`, so the existing `.env` works as-is.
+- The placeholder default model `qwen2.5-72b-instruct` does **not** exist on
+  Pioneer (`POST /v1/chat/completions` -> 404). Checked `GET /v1/models` --
+  switched the default to `gpt-4.1-mini`, which is listed and works.
+- Ran a full live negotiation through `build_graph().invoke(...)` against
+  the real Pioneer.ai API (model `gpt-4.1-mini`): both agents produced
+  well-formed `[OFFER price=... quantity=... action=...]` tags, converged to
+  $9.50/unit x 200 units in 6 turns, status `FULFILLED`, invoice generated.
+  **Vendor and Buyer Agents are live on Pioneer.ai.**
+
+### 4. Optional follow-ups
+- `PROMISE_BASE_URL` / `PIONEER_BASE_URL` default to `https://api.pioneer.ai`
+  if unset.
+- `PROMISE_MODEL` / `PIONEER_MODEL` default to `gpt-4.1-mini`; override via
+  env var to try a different chat model from `GET /v1/models`.
