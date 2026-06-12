@@ -13,6 +13,7 @@ block the negotiation.
 import json
 import logging
 import os
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -73,27 +74,29 @@ CLICKHOUSE_SECURE = _env("CLICKHOUSE_SECURE", "true").lower() == "true"
 
 _UNSET = object()
 _CLIENT = _UNSET
+_CLIENT_LOCK = threading.Lock()
 
 
 def _get_client():
     global _CLIENT
-    if _CLIENT is _UNSET:
-        try:
-            client = clickhouse_connect.get_client(
-                host=CLICKHOUSE_HOST,
-                port=CLICKHOUSE_PORT,
-                username=CLICKHOUSE_USER,
-                password=CLICKHOUSE_PASSWORD,
-                database=CLICKHOUSE_DATABASE,
-                secure=CLICKHOUSE_SECURE,
-            )
-            client.command(f"CREATE DATABASE IF NOT EXISTS {CLICKHOUSE_DATABASE}")
-            client.command(AGENT_MESSAGE_LOGS_DDL)
-            client.command(AGENT_TOOL_EXECUTIONS_DDL)
-            _CLIENT = client
-        except Exception as exc:
-            logger.error("ClickHouse client initialization failed: %s", exc)
-            _CLIENT = None
+    with _CLIENT_LOCK:
+        if _CLIENT is _UNSET:
+            try:
+                client = clickhouse_connect.get_client(
+                    host=CLICKHOUSE_HOST,
+                    port=CLICKHOUSE_PORT,
+                    username=CLICKHOUSE_USER,
+                    password=CLICKHOUSE_PASSWORD,
+                    database=CLICKHOUSE_DATABASE,
+                    secure=CLICKHOUSE_SECURE,
+                )
+                client.command(f"CREATE DATABASE IF NOT EXISTS {CLICKHOUSE_DATABASE}")
+                client.command(AGENT_MESSAGE_LOGS_DDL)
+                client.command(AGENT_TOOL_EXECUTIONS_DDL)
+                _CLIENT = client
+            except Exception as exc:
+                logger.error("ClickHouse client initialization failed: %s", exc)
+                _CLIENT = None
     return _CLIENT
 
 
