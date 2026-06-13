@@ -27,34 +27,68 @@ A guardrail node validates each offer against each side's hard constraints. Once
 
 ## Architecture
 
-```
-Browser (React + Vite)
-        │
-        │  POST /negotiations/start
-        │  GET  /negotiations/{id}   (polls every ~1s)
-        │  GET  /config
-        ▼
-FastAPI Backend  (:8000)
-        │
-        ▼
-LangGraph StateGraph
-        │
-        ├── buyer_agent            Pioneer.ai LLM (fine-tuned Qwen3-8B)
-        ├── vendor_agent           Pioneer.ai LLM (fine-tuned Qwen3-8B)
-        ├── guardrail_validator    Enforces price floors/ceilings + turn limit
-        ├── payment_request        Vendor creates Stripe PaymentIntent
-        ├── payment_authorization  Buyer confirms PaymentIntent
-        └── generate_invoice       Assembles final invoice
-                │
-                ├── ClickHouse   Telemetry (agent_message_logs, agent_tool_executions)
-                └── In-memory    Active negotiation state store
+```mermaid
+flowchart TD
+    UI["🖥️ React + Vite UI\n(harnessengineeringhackathon.onrender.com)"]
+
+    subgraph API["FastAPI Backend"]
+        EP1["POST /negotiations/start"]
+        EP2["GET /negotiations/{id}"]
+        EP3["GET /config"]
+    end
+
+    subgraph Graph["LangGraph State Machine"]
+        BA["🤖 BuyerAgent"]
+        VA["🤖 VendorAgent"]
+        GV["🛡️ Guardrail Validator\n(price bounds · turn limit)"]
+        PR["💳 payment_request\n(Vendor creates PaymentIntent)"]
+        PA["✅ payment_authorization\n(Buyer confirms PaymentIntent)"]
+        INV["🧾 generate_invoice"]
+    end
+
+    LLM["🧠 Pioneer.ai\nfine-tuned Qwen3-8B"]
+    CH["🗄️ ClickHouse\nTelemetry"]
+    MEM["📦 In-Memory\nState Store"]
+
+    UI -->|"POST /negotiations/start"| EP1
+    UI -->|"GET poll every ~1s"| EP2
+    UI -->|"GET /config on mount"| EP3
+
+    EP1 --> Graph
+    EP2 --> MEM
+    EP3 --> MEM
+
+    Graph --> MEM
+
+    BA -->|"system prompt + history"| LLM
+    VA -->|"system prompt + history"| LLM
+    LLM -->|"OFFER tag response"| GV
+
+    BA --> GV
+    VA --> GV
+    GV -->|COUNTER| BA
+    GV -->|COUNTER| VA
+    GV -->|ACCEPT| PR
+    GV -->|VIOLATED / MAX TURNS| TERM["🚫 TERMINATED"]
+
+    PR --> PA
+    PA --> INV
+    INV --> FULFILLED["🎉 FULFILLED + Invoice"]
+
+    Graph -->|"log_message\nlog_tool_execution"| CH
+
+    style UI fill:#4f46e5,color:#fff
+    style LLM fill:#7c3aed,color:#fff
+    style CH fill:#0891b2,color:#fff
+    style FULFILLED fill:#16a34a,color:#fff
+    style TERM fill:#dc2626,color:#fff
+    style Graph fill:#f8fafc,stroke:#cbd5e1
+    style API fill:#f1f5f9,stroke:#cbd5e1
 ```
 
-**Negotiation status flow:**
-```
-NEGOTIATING → AGREEMENT → PAYMENT_PENDING → FULFILLED
-                                          ↘ TERMINATED (on payment failure or constraint violation)
-```
+**Status transitions:**
+`NEGOTIATING` → `AGREEMENT` → `PAYMENT_PENDING` → `FULFILLED`
+`NEGOTIATING` → `TERMINATED` (constraint violation or turn limit reached)
 
 ---
 
