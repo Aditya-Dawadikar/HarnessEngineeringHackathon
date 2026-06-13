@@ -28,19 +28,38 @@ A guardrail node validates each offer against each side's hard constraints. Once
 
 ```mermaid
 flowchart LR
-    UI["🖥️ React + Vite\nFrontend"]
-    BE["⚙️ FastAPI + LangGraph\nBackend"]
-    LLM["🧠 Pioneer.ai\nFine-tuned Qwen3-8B"]
-    DB["🗄️ ClickHouse\nTelemetry"]
+    subgraph MLOps["⚗️ MLOps Pipeline"]
+        direction TB
+        SYN["📝 Synthetic\nDataset"]
+        FT["🔧 Fine-tune\nQwen3-8B LoRA"]
+        MDL["🚀 Deployed\nModel"]
+        SYN -->|"pioneer_mlops.py"| FT --> MDL
+    end
 
-    UI -->|"REST API"| BE
-    BE -->|"chat completions"| LLM
-    BE -->|"event logs"| DB
+    subgraph Runtime["🔄 Runtime"]
+        direction TB
+        UI["🖥️ React + Vite\nFrontend"]
+        BE["⚙️ FastAPI +\nLangGraph"]
+        UI -->|"REST API"| BE
+    end
+
+    subgraph Observability["📊 Observability"]
+        direction TB
+        CH["🗄️ ClickHouse\nTelemetry"]
+        EV["📈 Token & Eval\nMetrics"]
+        CH --> EV
+    end
+
+    MDL -->|"chat completions\n~120 tokens/turn"| BE
+    BE -->|"agent messages\ntool executions"| CH
 
     style UI fill:#4f46e5,color:#fff
     style BE fill:#0f172a,color:#fff
-    style LLM fill:#7c3aed,color:#fff
-    style DB fill:#0891b2,color:#fff
+    style MDL fill:#7c3aed,color:#fff
+    style FT fill:#6d28d9,color:#fff
+    style SYN fill:#8b5cf6,color:#fff
+    style CH fill:#0891b2,color:#fff
+    style EV fill:#0e7490,color:#fff
 ```
 
 ---
