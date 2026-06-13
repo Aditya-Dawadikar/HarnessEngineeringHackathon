@@ -20,8 +20,7 @@ A guardrail node validates each offer against each side's hard constraints. Once
 
 ## Screenshot
 
-![App UI](<img width="1394" height="941" alt="Screenshot 2026-06-12 at 8 46 42 PM" src="https://github.com/user-attachments/assets/541506f2-a96a-437a-8ceb-512595f9b3d8" />
-)
+![App UI](https://github.com/user-attachments/assets/541506f2-a96a-437a-8ceb-512595f9b3d8)
 
 ---
 
