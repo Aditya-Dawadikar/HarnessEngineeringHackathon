@@ -18,33 +18,9 @@ A guardrail node validates each offer against each side's hard constraints. Once
 
 ---
 
-## Screenshots
+## Screenshot
 
-### Negotiation context panel
-Vendor and Buyer inventory cards load from `GET /config` on mount, alongside a price-range bar showing the deal zone — the overlap between the vendor's ask range and the buyer's budget.
-
-![Negotiation context panel](docs/screenshots/01-context-panel.png)
-
----
-
-### Negotiation in progress
-Agents alternate turns. Each message shows the sender, the natural-language text, and the extracted price and quantity. The status badge and turn counter update in real time.
-
-![Live negotiation](docs/screenshots/02-negotiation-live.png)
-
----
-
-### Deal reached — invoice generated
-When both agents agree, the graph runs the payment flow and renders the final invoice: product, quantity, unit price, total, and Stripe payment intent status.
-
-![Fulfilled with invoice](docs/screenshots/03-fulfilled.png)
-
----
-
-### Negotiation terminated
-If agents can't agree within the price bounds or the 10-turn limit is reached, a TERMINATED banner is shown.
-
-![Terminated](docs/screenshots/04-terminated.png)
+![App UI](docs/screenshots/ui.png)
 
 ---
 
