@@ -2,7 +2,49 @@
 
 > Autonomous AI agents that negotiate deals and settle payments — no humans required.
 
-Two LLM-powered agents (Vendor and Buyer) negotiate a purchase deal inside a LangGraph state machine, driven by a fine-tuned **Qwen3-8B** model on **Pioneer.ai**. When both sides agree, a Stripe-shaped payment flow fires automatically. A React UI streams the conversation live and renders the final invoice.
+Two LLM-powered agents (Vendor and Buyer) negotiate a purchase deal inside a LangGraph state machine, driven by a fine-tuned **Qwen3-8B** model on **Pioneer.ai**. When both sides agree, a Stripe-shaped payment flow fires automatically and an invoice is generated — end to end, no human in the loop.
+
+---
+
+## How it works
+
+When you hit **Start Negotiation**, the backend spins up a LangGraph session. The Vendor and Buyer agents take turns proposing prices. Every message must end with a structured tag:
+
+```
+[OFFER price=X.XX quantity=N action=ACCEPT|COUNTER|REJECT]
+```
+
+A guardrail node validates each offer against each side's hard constraints. Once both agents emit `ACCEPT` at an agreed price, the graph automatically transitions to the payment flow — the Vendor creates a Stripe `PaymentIntent`, the Buyer confirms it, and an invoice is produced. The UI streams every step live.
+
+---
+
+## Screenshots
+
+### Negotiation context panel
+Vendor and Buyer inventory cards load from `GET /config` on mount, alongside a price-range bar showing the deal zone — the overlap between the vendor's ask range and the buyer's budget.
+
+![Negotiation context panel](docs/screenshots/01-context-panel.png)
+
+---
+
+### Negotiation in progress
+Agents alternate turns. Each message shows the sender, the natural-language text, and the extracted price and quantity. The status badge and turn counter update in real time.
+
+![Live negotiation](docs/screenshots/02-negotiation-live.png)
+
+---
+
+### Deal reached — invoice generated
+When both agents agree, the graph runs the payment flow and renders the final invoice: product, quantity, unit price, total, and Stripe payment intent status.
+
+![Fulfilled with invoice](docs/screenshots/03-fulfilled.png)
+
+---
+
+### Negotiation terminated
+If agents can't agree within the price bounds or the 10-turn limit is reached, a TERMINATED banner is shown.
+
+![Terminated](docs/screenshots/04-terminated.png)
 
 ---
 
@@ -20,57 +62,54 @@ FastAPI Backend  (:8000)
         ▼
 LangGraph StateGraph
         │
-        ├── buyer_agent          Pioneer.ai LLM (Qwen3-8B fine-tuned)
-        ├── vendor_agent         Pioneer.ai LLM (Qwen3-8B fine-tuned)
-        ├── guardrail_validator  Enforces price floors/ceilings + turn limit
-        ├── payment_request      Vendor creates Stripe PaymentIntent
-        ├── payment_authorization Buyer confirms PaymentIntent
-        └── generate_invoice     Assembles final invoice
+        ├── buyer_agent            Pioneer.ai LLM (fine-tuned Qwen3-8B)
+        ├── vendor_agent           Pioneer.ai LLM (fine-tuned Qwen3-8B)
+        ├── guardrail_validator    Enforces price floors/ceilings + turn limit
+        ├── payment_request        Vendor creates Stripe PaymentIntent
+        ├── payment_authorization  Buyer confirms PaymentIntent
+        └── generate_invoice       Assembles final invoice
                 │
                 ├── ClickHouse   Telemetry (agent_message_logs, agent_tool_executions)
                 └── In-memory    Active negotiation state store
 ```
 
-### Negotiation flow
-
-Each agent turn produces a message ending with a structured tag:
-
+**Negotiation status flow:**
 ```
-[OFFER price=X.XX quantity=N action=ACCEPT|COUNTER|REJECT]
+NEGOTIATING → AGREEMENT → PAYMENT_PENDING → FULFILLED
+                                          ↘ TERMINATED (on payment failure or constraint violation)
 ```
-
-The guardrail validator checks every offer. A deal closes when both sides emit `action=ACCEPT` at a price within the overlap zone. If either agent violates its hard constraint or the turn limit (10) is reached, the negotiation terminates.
 
 ---
 
 ## Repo layout
 
 ```
-Backend/          FastAPI + LangGraph negotiation engine
+Backend/
   app/
-    main.py       API endpoints (POST /negotiations/start, GET /negotiations/{id}, GET /config)
-    graph.py      LangGraph state machine + all agent/payment nodes
-    llm_client.py Pioneer.ai OpenAI-compatible client (falls back to mock if unconfigured)
-    payments.py   Mock Stripe PaymentIntent lifecycle
-    telemetry.py  ClickHouse client (lazy-init, non-blocking)
-    config.py     Vendor/Buyer domain config (prices, quantities, display fields)
-  tests/          pytest suite (50 tests)
+    main.py         API endpoints (health, config, negotiations)
+    graph.py        LangGraph state machine + all agent/payment nodes
+    llm_client.py   Pioneer.ai client — falls back to mock if unconfigured
+    payments.py     Mock Stripe PaymentIntent lifecycle
+    telemetry.py    ClickHouse client (lazy-init, non-blocking)
+    config.py       Vendor/Buyer domain config
+  tests/            pytest suite (50 tests)
 
-UI/               Vite + React frontend
+UI/
   src/
-    api.js        startNegotiation / fetchNegotiation / fetchConfig
-    useNegotiation.js  Polling hook
-    useConfig.js  Config fetch hook
+    api.js               fetchConfig / startNegotiation / fetchNegotiation
+    useConfig.js         Config hook (fetches GET /config once on mount)
+    useNegotiation.js    Polling hook (polls every ~1s until terminal state)
     InventoryContext.jsx  Vendor/Buyer cards + deal-zone price bar
     MessageLog.jsx        Live negotiation transcript
     InvoiceBlock.jsx      Final invoice display
-    mock.js       Local mock (VITE_USE_MOCK=true)
+    mock.js              Local mock (VITE_USE_MOCK=true)
 
-eval/             Pioneer MLOps pipeline
-  pioneer_mlops.py  Generates synthetic training data + fine-tunes Qwen3-8B via Pioneer API
+eval/
+  pioneer_mlops.py  Generates synthetic training data + fine-tunes Qwen3-8B
 
-render.yaml       Render deployment config
-startup.sh        One-command local dev launcher
+docs/screenshots/   App screenshots (replace placeholders with real images)
+render.yaml         Render deployment config
+startup.sh          One-command local dev launcher
 ```
 
 ---
@@ -81,18 +120,19 @@ startup.sh        One-command local dev launcher
 
 - Python 3.12+
 - Node.js 18+
-- A Pioneer.ai API key (without it the backend falls back to a deterministic mock — still fully functional)
+- A Pioneer.ai API key — without it the backend falls back to a deterministic mock (still fully functional for UI development)
 
 ### 1. Configure environment
 
 ```bash
 cp .env.example .env
-# Edit .env and fill in PIONEER_API_KEY (and optionally ClickHouse credentials)
+# Fill in PIONEER_API_KEY (required for live LLM negotiation)
+# ClickHouse credentials are optional — telemetry is disabled if unset
 ```
 
 ```bash
 cp UI/.env.example UI/.env
-# Edit UI/.env if you need to point at a deployed backend (VITE_API_BASE)
+# Only needed if pointing at a deployed backend (VITE_API_BASE)
 ```
 
 ### 2a. One-command startup (recommended)
@@ -101,12 +141,11 @@ cp UI/.env.example UI/.env
 ./startup.sh
 ```
 
-Starts the FastAPI backend on `:8000` and the Vite UI on `:5173`. Open `http://localhost:5173` and click **Start Negotiation**. Stop both with `Ctrl+C`.
+Starts the FastAPI backend on `:8000` and Vite on `:5173`. Open `http://localhost:5173` and click **Start Negotiation**. Stop both with `Ctrl+C`.
 
 ### 2b. Manual startup
 
 **Backend:**
-
 ```bash
 cd Backend
 python -m venv .venv
@@ -116,7 +155,6 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 **UI:**
-
 ```bash
 cd UI
 npm install
@@ -124,7 +162,7 @@ npm run dev
 # Open http://localhost:5173
 ```
 
-The Vite dev server proxies `/negotiations/*` and `/config` to `:8000` — no CORS setup needed locally.
+The Vite dev proxy forwards `/negotiations/*` and `/config` to `:8000` — no CORS setup needed locally.
 
 ### Mock mode (no backend required)
 
@@ -133,7 +171,7 @@ cd UI
 VITE_USE_MOCK=true npm run dev
 ```
 
-Replays a scripted negotiation with shapes that mirror the real backend exactly.
+Replays a scripted 6-turn negotiation with shapes that mirror the real backend exactly.
 
 ---
 
@@ -143,9 +181,9 @@ Replays a scripted negotiation with shapes that mirror the real backend exactly.
 
 | Variable | Required | Description |
 |---|---|---|
-| `PIONEER_API_KEY` | Yes (for live LLM) | Pioneer.ai API key. Without it, agents use a deterministic mock strategy. |
-| `PIONEER_MODEL` | No | Model ID or training job ID. Defaults to `gpt-4.1-mini`. Currently set to the fine-tuned `negotiation-agent-evals` Qwen3-8B adapter. |
-| `CLICKHOUSE_HOST` | No | ClickHouse host. Leave blank to disable telemetry (negotiation still works). |
+| `PIONEER_API_KEY` | For live LLM | Pioneer.ai API key. Without it, agents use a deterministic mock. |
+| `PIONEER_MODEL` | No | Model ID or training job ID. Defaults to `gpt-4.1-mini`. Production uses the fine-tuned Qwen3-8B adapter. |
+| `CLICKHOUSE_HOST` | No | ClickHouse host. Leave blank to disable telemetry. |
 | `CLICKHOUSE_PORT` | No | Defaults to `8443`. |
 | `CLICKHOUSE_DATABASE` | No | Defaults to `default`. |
 | `CLICKHOUSE_USER` | No | ClickHouse username. |
@@ -156,8 +194,8 @@ Replays a scripted negotiation with shapes that mirror the real backend exactly.
 
 | Variable | Required | Description |
 |---|---|---|
-| `VITE_API_BASE` | Production only | Backend URL, e.g. `https://negotiate-backend.onrender.com`. Leave blank in local dev (Vite proxy handles it). |
-| `VITE_USE_MOCK` | No | Set to `true` to run the UI against the local mock without a backend. |
+| `VITE_API_BASE` | Production only | Backend URL e.g. `https://negotiate-backend.onrender.com`. Leave blank locally (Vite proxy handles it). |
+| `VITE_USE_MOCK` | No | Set to `true` to run without a backend. |
 
 ---
 
@@ -167,14 +205,12 @@ Replays a scripted negotiation with shapes that mirror the real backend exactly.
 |---|---|---|
 | `GET` | `/health` | Health check → `{"status": "ok"}` |
 | `GET` | `/config` | Vendor + buyer domain config (prices, product, quantities) |
-| `POST` | `/negotiations/start` | Start a new negotiation → `{"transaction_id": "<uuid>"}` |
-| `GET` | `/negotiations/{id}` | Poll negotiation state (status, messages, invoice) |
-
-**Negotiation status values:** `NEGOTIATING` → `AGREEMENT` → `PAYMENT_PENDING` → `FULFILLED` (or `TERMINATED`)
+| `POST` | `/negotiations/start` | Start a negotiation → `{"transaction_id": "<uuid>"}` |
+| `GET` | `/negotiations/{id}` | Poll state → status, messages, invoice |
 
 ---
 
-## Running tests
+## Tests
 
 ```bash
 cd Backend
@@ -187,16 +223,22 @@ pytest
 
 ## Deployment (Render)
 
-The repo includes `render.yaml` for the backend. Key setting: uvicorn must bind to `0.0.0.0` (not `127.0.0.1`) so Render's port scanner can detect it.
+`render.yaml` configures the backend service. The critical setting is binding uvicorn to `0.0.0.0` so Render's port scanner can detect it:
 
 ```
 startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 
-Set all backend env vars in Render's **Environment** dashboard. The `.env` file is gitignored and not deployed.
+Set all backend env vars in Render's **Environment** tab. The `.env` file is gitignored and never deployed.
 
 ---
 
 ## Fine-tuned model
 
-`eval/pioneer_mlops.py` generates a synthetic negotiation dataset and fine-tunes `Qwen/Qwen3-8B` (LoRA) via Pioneer's training API. The deployed adapter (`negotiation-agent-evals-20260612211958`) is what both agents currently use in production — ~120 tokens per turn, faster and more reliable than a general-purpose model for this task. See `PIONEER_SETUP.md` for full integration notes.
+`eval/pioneer_mlops.py` generates a synthetic negotiation dataset and fine-tunes `Qwen/Qwen3-8B` (LoRA) via Pioneer's training API. The deployed adapter (`negotiation-agent-evals-20260612211958`) is what both agents use in production — ~120 tokens per turn, structurally reliable output compared to prompting a general-purpose model. See `PIONEER_SETUP.md` for the full integration notes and live verification log.
+
+---
+
+## Stack
+
+Python · FastAPI · LangGraph · LangChain · Pioneer.ai · Qwen3-8B · React · Vite · ClickHouse · Stripe · Render
