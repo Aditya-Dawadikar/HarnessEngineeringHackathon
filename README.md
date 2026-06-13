@@ -27,67 +27,21 @@ A guardrail node validates each offer against each side's hard constraints. Once
 ## Architecture
 
 ```mermaid
-flowchart TD
-    UI["🖥️ React + Vite UI\n(harnessengineeringhackathon.onrender.com)"]
+flowchart LR
+    UI["🖥️ React + Vite\nFrontend"]
+    BE["⚙️ FastAPI + LangGraph\nBackend"]
+    LLM["🧠 Pioneer.ai\nFine-tuned Qwen3-8B"]
+    DB["🗄️ ClickHouse\nTelemetry"]
 
-    subgraph API["FastAPI Backend"]
-        EP1["POST /negotiations/start"]
-        EP2["GET /negotiations/{id}"]
-        EP3["GET /config"]
-    end
-
-    subgraph Graph["LangGraph State Machine"]
-        BA["🤖 BuyerAgent"]
-        VA["🤖 VendorAgent"]
-        GV["🛡️ Guardrail Validator\n(price bounds · turn limit)"]
-        PR["💳 payment_request\n(Vendor creates PaymentIntent)"]
-        PA["✅ payment_authorization\n(Buyer confirms PaymentIntent)"]
-        INV["🧾 generate_invoice"]
-    end
-
-    LLM["🧠 Pioneer.ai\nfine-tuned Qwen3-8B"]
-    CH["🗄️ ClickHouse\nTelemetry"]
-    MEM["📦 In-Memory\nState Store"]
-
-    UI -->|"POST /negotiations/start"| EP1
-    UI -->|"GET poll every ~1s"| EP2
-    UI -->|"GET /config on mount"| EP3
-
-    EP1 --> Graph
-    EP2 --> MEM
-    EP3 --> MEM
-
-    Graph --> MEM
-
-    BA -->|"system prompt + history"| LLM
-    VA -->|"system prompt + history"| LLM
-    LLM -->|"OFFER tag response"| GV
-
-    BA --> GV
-    VA --> GV
-    GV -->|COUNTER| BA
-    GV -->|COUNTER| VA
-    GV -->|ACCEPT| PR
-    GV -->|VIOLATED / MAX TURNS| TERM["🚫 TERMINATED"]
-
-    PR --> PA
-    PA --> INV
-    INV --> FULFILLED["🎉 FULFILLED + Invoice"]
-
-    Graph -->|"log_message\nlog_tool_execution"| CH
+    UI -->|"REST API"| BE
+    BE -->|"chat completions"| LLM
+    BE -->|"event logs"| DB
 
     style UI fill:#4f46e5,color:#fff
+    style BE fill:#0f172a,color:#fff
     style LLM fill:#7c3aed,color:#fff
-    style CH fill:#0891b2,color:#fff
-    style FULFILLED fill:#16a34a,color:#fff
-    style TERM fill:#dc2626,color:#fff
-    style Graph fill:#f8fafc,stroke:#cbd5e1
-    style API fill:#f1f5f9,stroke:#cbd5e1
+    style DB fill:#0891b2,color:#fff
 ```
-
-**Status transitions:**
-`NEGOTIATING` → `AGREEMENT` → `PAYMENT_PENDING` → `FULFILLED`
-`NEGOTIATING` → `TERMINATED` (constraint violation or turn limit reached)
 
 ---
 
